@@ -1,0 +1,48 @@
+<!DOCTYPE beans PUBLIC "-//SPRING//DTD BEAN//EN" "http://www.springframework.org/dtd/spring-beans.dtd">
+<beans>
+	<bean id="orthologRelationLoadingManager" class="edu.mcw.rgd.dataload.OrthologRelationLoadingManager">
+        <property name="version" value="Ortholog Relation Loader v. 2.3.9 (Sep 21, 2018)"/>
+		<property name="orthologRelationParser" ref="orthologRelationParser"/>
+		<property name="orthologRelationLoader" ref="orthologRelationLoader"/>
+		<property name="rgdLogger" ref="rgdLogger"/>
+        <property name="xrefDataSrc" value="HGNC" />
+	</bean>
+	
+	<bean id="orthologRelationLoader" class="edu.mcw.rgd.dataload.OrthologRelationLoader">
+		<property name="orthologRelationParser" ref="orthologRelationParser"/>
+		<property name="orthologRelationDao" ref="orthologRelationDao"/>
+		<property name="defaultDataSetName" value="HCOP"/>
+		<property name="createdBy" value="70" />
+	</bean>
+	
+	<bean id="orthologRelationDao" class="edu.mcw.rgd.dataload.OrthologRelationDao">
+		<property name="directOrthologTypeKey" value="11" />
+		<property name="transitiveOrthologTypeKey" value="13" />
+	</bean>
+	
+	<bean id="rgdLogger" class="edu.mcw.rgd.log.RGDSpringLogger">
+	</bean>
+	
+	<bean id="orthologRelationParser" class="edu.mcw.rgd.dataload.OrthologRelationParser">
+        <property name="file" ref="orthologRelationFile"/>
+	</bean>
+
+    <bean id="orthologRelationFile" class="edu.mcw.rgd.dataload.OrthologRelationFile">
+        <property name="externalHcopFile" value="ftp://ftp.ebi.ac.uk/pub/databases/genenames/hcop/human_all_hcop_sixteen_column.txt.gz"/>
+		<property name="externalNcbiFile" value="ftp://ftp.ncbi.nih.gov/gene/DATA/gene_orthologs.gz"/>
+        <property name="localHcopFile" value="data/hgnc.data"/>
+		<property name="localNcbiFile" value="data/ncbi.data"/>
+        <property name="appendDateStamp" value="true"/>
+        <property name="useCompression" value="true"/>
+		<property name="hcopSpecies">
+			<set>
+				<value>Human</value>
+				<value>Rat</value>
+				<value>Mouse</value>
+				<value>Dog</value>
+			</set>
+		</property>
+    </bean>
+</beans>
+
+

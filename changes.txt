@@ -1,0 +1,58 @@
+TODO: generate rat_genes_without_orthologs file
+TODO: generate multi ortholog assignment for rat
+TODO: logRgd -- inacurate, must be species-specific
+
+v. 2.3.9 Sep 21, 2018
+  moved from subversion to github
+
+v. 2.3.8 Aug 10, 2018
+  improved logging
+
+v. 2.3.7 Mar 16, 2018
+  initial version of code to load 'alliance orthologs' for rat from AGR
+
+v. 2.3.6 Jan 30, 2018
+  only one summary email is sent after processing all species, instead of 6 sent previously by the pipeline
+
+v. 2.3.5 Dec 11, 2017
+  changed NCBI source file, from 'gene_groups.gz' to 'gene_orthologs.gz'
+
+v. 2.3.4 Mar 9, 2017
+  runAll.sh script loads human-to-species direct orthologs for all species
+
+v. 2.3.3 Feb 9, 2017
+  updated handling of ortholog types: ortholog types are set according to RGDD-1346
+
+v. 2.3.2 Feb 6, 2017
+  upgraded build scripts from ANT to GRADLE
+
+v. 2.3.1 Feb 1, 2017
+  added loading of HUMAN-SPECIES orthologs from NCBI source (in addition to currently supported HCOP source)
+
+v. 2.3.0 Jan 24, 2017
+  added loading of HUMAN<==>DOG orthologs and associations
+
+v. 2.2.1 Jun 28, 2016 -- per RGDD-1239
+  'HCOP' will be used as the data set name for all rat-mouse orthologs that now have null source -- per RGDD-1239
+
+v. 2.2.0 Jun 13, 2016 -- per RGDD-1234
+  removal of duplicate sources present in incoming file
+    f.e. Ensembl,Ensembl,Ensembl,Ensembl,Inparanoid,Inparanoid,HomoloGene,HomoloGene,OMA,OMA,Treefam,Treefam,OrthoDB,OrthoDB,PhylomeDB,PhylomeDB,EggNOG,EggNOG,OrthoMCL,OrthoMCL,NCBI,NCBI,Panther,Panther
+  implemented cmdline parameter '--fixXRefDataSet', which removes duplicates from in XREF_DATA_SET column
+    for orthologs and from ASSOC_SUBTYPE column for associations of type 'weak_ortholog'
+
+v. 2.1.2 Nov 6, 2014
+  fixed generation of file with cross-linked orthologs
+
+v. 2.1.1 Jul 21, 2014
+  changed data source (new HCOP website, was redesigned)
+
+v. 2.1.0 Jul 18, 2014
+  fixed logic so it works according to the specification (due to a bug incorrect orthologs were created
+  for non-trivial relations between orthologs)
+
+v. 2.0.6 Jan 10, 2014
+  updated url to source file at HCOP
+
+v. 2.0.5 Nov 27, 2013
+  fixed a NullPointerException bug in OrthologRelationDao
