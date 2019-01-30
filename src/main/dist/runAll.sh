@@ -4,7 +4,7 @@ APPDIR=/home/rgddata/pipelines/OrthologRelationLoading
 SERVER=`hostname -s | tr '[a-z]' '[A-Z]'`
 
 #load human-to-species orthologs (only direct orthologs)
-SPECIES_LIST=( "mouse" "rat" "dog" "bonobo" "squirrel" "chinchilla" )
+SPECIES_LIST=( "mouse" "rat" "dog" "bonobo" "squirrel" "chinchilla" "pig" )
 
 export SKIP_EMAIL_SUMMARY=1
 for SPECIES in "${SPECIES_LIST[@]}"; do
