@@ -489,13 +489,8 @@ public class OrthologRelationDao {
     }
 
 
-    /**
-     * get all genes with given external id
-     * @param geneId - external id to be looked for
-     * @return list of Gene objects
-     */
     public List<Gene> getGenesByGeneId(String geneId) throws Exception {
-        return xdbIdDAO.getActiveGenesByXdbId(XdbId.XDB_KEY_ENTREZGENE, geneId);
+        return getGenesByXdbId(geneId, XdbId.XDB_KEY_ENTREZGENE);
     }
 
     public List<Integer> getRgdIdListByEGID(String egId) throws Exception {
@@ -504,6 +499,18 @@ public class OrthologRelationDao {
                 +"and x.RGD_ID=g.RGD_ID and g.GENE_TYPE_LC NOT IN('allele','splice')",
                 new Object[]{egId}, new int[]{Types.VARCHAR}, Integer.class);
     }
+
+    public List<Gene> getGenesByXdbId(String geneId, int xdbKey) throws Exception {
+        String key = xdbKey + geneId;
+        List<Gene> genes = _genesByXdbIdCache.get(key);
+        if( genes==null ) {
+            genes = xdbIdDAO.getActiveGenesByXdbId(xdbKey, geneId);
+            _genesByXdbIdCache.put(key, genes);
+        }
+        return genes;
+    }
+    private Map<String, List<Gene>> _genesByXdbIdCache = new HashMap<>();
+
 
     /**
      * get status of object identified by rgd id
@@ -527,6 +534,10 @@ public class OrthologRelationDao {
     }
     static Map<Integer, RgdId> _rgdIdCache = new HashMap<>(10003);
 
+    Gene getGeneByRgdId(int rgdId) throws Exception {
+        return geneDAO.getGene(rgdId);
+    }
+
     synchronized public String getGeneSymbol(int geneRgdId) {
 
         String geneSymbol = _geneSymbolCache.get(geneRgdId);
@@ -542,6 +553,38 @@ public class OrthologRelationDao {
         return geneSymbol;
     }
     static Map<Integer, String> _geneSymbolCache = new HashMap<>(10003);
+
+    public Gene getGeneBySymbol(String geneSymbol, int speciesTypeKey) throws Exception {
+        List<Gene> genes = geneDAO.getAllGenesBySymbol(geneSymbol, speciesTypeKey);
+        if( genes.size()>1 ) {
+            throw new Exception("multiple genes for symbol "+geneSymbol+", species "+speciesTypeKey);
+        }
+        return genes.isEmpty() ? null : genes.get(0);
+    }
+
+    public Gene insertAgrGene(int speciesTypeKey, String geneSymbol, String agrGeneId) throws Exception {
+
+        // extra security: cannot insert a HUMAN, MOUSE, RAT gene
+        if( speciesTypeKey==SpeciesType.HUMAN || speciesTypeKey==SpeciesType.MOUSE || speciesTypeKey==SpeciesType.RAT ) {
+            return null;
+        }
+
+        RgdId id = rgdIdDAO.createRgdId(RgdId.OBJECT_KEY_GENES, "ACTIVE", "created by AGR Ortholog Loader", speciesTypeKey);
+
+        Gene gene = new Gene();
+        gene.setRgdId(id.getRgdId());
+        gene.setSymbol(geneSymbol);
+        geneDAO.insertGene(gene);
+
+        XdbId xdbId = new XdbId();
+        xdbId.setRgdId(id.getRgdId());
+        xdbId.setAccId(agrGeneId);
+        xdbId.setXdbKey(63);
+        xdbId.setSrcPipeline("AgrOrtholog");
+        xdbIdDAO.insertXdb(xdbId);
+
+        return gene;
+    }
 
     public List<String> getCrossLinkedOrthologs(int speciesTypeKey) throws Exception {
         JdbcTemplate jt=new JdbcTemplate(this.getDataSource());

@@ -2,12 +2,18 @@ package edu.mcw.rgd.dataload;
 
 import edu.mcw.rgd.dao.impl.XdbIdDAO;
 import edu.mcw.rgd.datamodel.Gene;
+import edu.mcw.rgd.datamodel.SpeciesType;
 import edu.mcw.rgd.datamodel.XdbId;
+import edu.mcw.rgd.process.FileDownloader;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 
+import java.io.FileNotFoundException;
 import java.io.FileReader;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -16,6 +22,7 @@ import java.util.List;
 public class AgrLoader {
 
     XdbIdDAO xdao = new XdbIdDAO();
+    OrthologRelationDao dao = new OrthologRelationDao();
 
     int invalidSpecies = 0;
     int noMatchHgnc = 0;
@@ -31,6 +38,158 @@ public class AgrLoader {
     }
 
     void run() throws Exception {
+
+        String[] taxons = { "Homo", "Mus", "Rattus", "Danio", "Drosophila", "Caenorhabditis", "Saccharomyces" };
+        List<String> taxonList = new ArrayList<>(Arrays.asList(taxons));
+        Collections.shuffle(taxonList);
+
+        for( String taxon: taxonList ) {
+            System.out.println("starting "+taxon);
+            run(taxon);
+        }
+    }
+
+    void run( String taxon ) throws Exception {
+
+        final int rowsInBatch = 1000;
+        String url = "https://www.alliancegenome.org/api/homologs/{{TAXON}}?stringencyFilter=stringent&rows="+rowsInBatch+"&start=";
+        url = url.replace("{{TAXON}}", taxon);
+
+        FileDownloader fd = new FileDownloader();
+        fd.setDoNotUseHttpClient(true);
+
+        for( int start=1; ; start += rowsInBatch ) {
+            fd.setExternalFile(url+start);
+            fd.setLocalFile("data/"+taxon+"_"+start+".json");
+            String localFile = fd.downloadNew();
+            int recordsParsed = handleFile(localFile);
+            if( recordsParsed==0 ) {
+                break;
+            }
+        }
+    }
+
+    int handleFile(String fileName) throws Exception {
+
+        int linesInserted = 0;
+        int linesUpdated = 0;
+
+        JSONParser parser = new JSONParser();
+        Object obj = parser.parse(new FileReader(fileName));
+        JSONObject root = (JSONObject) obj;
+
+        JSONArray records = (JSONArray) root.get("results");
+        System.out.println("parsing "+fileName+"; records="+records.size());
+        for( Object rec: records ) {
+            JSONObject o = (JSONObject) rec;
+
+            JSONObject gene1 = (JSONObject) o.get("gene");
+            String speciesName = (String) gene1.get("speciesName");
+            String geneSymbol = (String) gene1.get("symbol");
+            String geneId = (String) gene1.get("geneID");
+            Gene g1 = resolveGene(speciesName, geneSymbol, geneId);
+
+            JSONObject gene2 = (JSONObject) o.get("homologGene");
+            speciesName = (String) gene2.get("speciesName");
+            geneSymbol = (String) gene2.get("symbol");
+            geneId = (String) gene2.get("geneID");
+            Gene g2 = resolveGene(speciesName, geneSymbol, geneId);
+
+            boolean isBestRevScore = (boolean) o.get("best");
+            boolean isBestScore = (boolean) o.get("bestReverse");
+
+            String methodsMatched = "";
+            JSONArray arr = (JSONArray) o.get("predictionMethodsMatched");
+            for( Object item: arr ) {
+                if( !methodsMatched.isEmpty() ) {
+                    methodsMatched += ", ";
+                }
+                methodsMatched += item.toString();
+            }
+
+            String methodsNotCalled = "";
+            arr = (JSONArray) o.get("predictionMethodsNotCalled");
+            for( Object item: arr ) {
+                if( !methodsNotCalled.isEmpty() ) {
+                    methodsNotCalled += ", ";
+                }
+                methodsNotCalled += item.toString();
+            }
+
+            String methodsNotMatched = "";
+            arr = (JSONArray) o.get("predictionMethodsNotMatched");
+            for( Object item: arr ) {
+                if( !methodsNotMatched.isEmpty() ) {
+                    methodsNotMatched += ", ";
+                }
+                methodsNotMatched += item.toString();
+            }
+
+            // String confidence = (String) o.get("confidence");  ???
+            String confidence = "stringent";
+
+            int r = updateDb(g1.getRgdId(), g2.getRgdId(), confidence, isBestScore, isBestRevScore, methodsMatched, methodsNotMatched, methodsNotCalled);
+            if( r==1 ) {
+                linesInserted++;
+            } else {
+                linesUpdated++;
+            }
+        }
+        return records.size();
+    }
+
+    Gene resolveGene(String speciesName, String geneSymbol, String geneId) throws Exception {
+
+        int speciesTypeKey = SpeciesType.parse(speciesName);
+        if( speciesTypeKey <= 0 ) {
+            System.out.println("SP problem");
+        }
+        Gene gene = null;
+
+        // first resolve by xdb id
+        if( speciesTypeKey==SpeciesType.RAT ) {
+            int geneRgdId = Integer.parseInt(geneId.substring(4));
+            gene = dao.getGeneByRgdId(geneRgdId);
+        } else {
+            int xdbKey = speciesTypeKey==SpeciesType.HUMAN ? XdbId.XDB_KEY_HGNC
+                    : speciesTypeKey==SpeciesType.MOUSE ? XdbId.XDB_KEY_MGD
+                    : 63; // AGR_GENE
+
+            List<Gene> genes = dao.getGenesByXdbId(geneId, xdbKey);
+            if( genes.size()>1 ) {
+                throw new Exception("multiple HGNC ids for "+geneId);
+            }
+            if( !genes.isEmpty() ) {
+                gene = genes.get(0);
+            }
+        }
+
+        // second, resolve by gene symbol
+        if( gene==null ) {
+            gene = dao.getGeneBySymbol(geneSymbol, speciesTypeKey);
+        }
+
+        // if gene still not found, insert it
+        if( gene==null ) {
+            gene = dao.insertAgrGene(speciesTypeKey, geneSymbol, geneId);
+        } else {
+            // fixup for zebrafish
+            if( speciesTypeKey==SpeciesType.ZEBRAFISH ) {
+                List<XdbId> xdbIds = xdao.getXdbIdsByRgdId(63, gene.getRgdId());
+                if( xdbIds.isEmpty() ) {
+                    XdbId xdbId = new XdbId();
+                    xdbId.setAccId(geneId);
+                    xdbId.setRgdId(gene.getRgdId());
+                    xdbId.setXdbKey(63);
+                    xdbId.setSrcPipeline("AgrOrtholog");
+                    xdao.insertXdb(xdbId);
+                }
+            }
+        }
+        return gene;
+    }
+
+    void runOld() throws Exception {
 
         int linesInserted = 0;
         int linesUpdated = 0;
