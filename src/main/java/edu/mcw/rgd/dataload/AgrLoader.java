@@ -5,16 +5,20 @@ import edu.mcw.rgd.datamodel.Gene;
 import edu.mcw.rgd.datamodel.SpeciesType;
 import edu.mcw.rgd.datamodel.XdbId;
 import edu.mcw.rgd.process.FileDownloader;
+import edu.mcw.rgd.process.Utils;
+import org.apache.log4j.Logger;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
+import org.springframework.jdbc.core.SqlParameter;
+import org.springframework.jdbc.object.MappingSqlQuery;
 
 import java.io.FileNotFoundException;
 import java.io.FileReader;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Types;
+import java.util.*;
 
 /**
  * Created by mtutaj on 3/14/2018.
@@ -24,12 +28,10 @@ public class AgrLoader {
     XdbIdDAO xdao = new XdbIdDAO();
     OrthologRelationDao dao = new OrthologRelationDao();
 
-    int invalidSpecies = 0;
-    int noMatchHgnc = 0;
-    int multiMatchHgnc = 0;
-    int noMatchMgi = 0;
-    int multiMatchMgi = 0;
+    Logger logDel = Logger.getLogger("deletedAgrOrthologs");
+    Logger logIns = Logger.getLogger("insertedAgrOrthologs");
 
+    int inserted = 0;
 
     public static void main(String[] args) throws Exception {
 
@@ -39,33 +41,89 @@ public class AgrLoader {
 
     void run() throws Exception {
 
-        String[] taxons = { "Homo", "Mus", "Rattus", "Danio", "Drosophila", "Caenorhabditis", "Saccharomyces" };
-        List<String> taxonList = new ArrayList<>(Arrays.asList(taxons));
-        Collections.shuffle(taxonList);
+        String[] species = { "human", "mouse", "rat", "zebrafish", "fly", "roundworm", "yeast" };
+        List<String> speciesList = new ArrayList<>(Arrays.asList(species));
+        Collections.shuffle(speciesList);
 
-        for( String taxon: taxonList ) {
-            System.out.println("starting "+taxon);
-            run(taxon);
+        for( String speciesName: speciesList ) {
+            System.out.println("starting "+speciesName);
+            run(speciesName);
         }
     }
 
-    void run( String taxon ) throws Exception {
+    void run( String speciesName ) throws Exception {
+
+        Date time0 = new Date();
+        int speciesTypeKey = SpeciesType.parse(speciesName);
+        String genus = SpeciesType.getOrganismGenus(speciesTypeKey); // f.e. 'Rattus'
+        if( Utils.isStringEmpty(genus) ) {
+            throw new Exception("ERROR: unknown species "+speciesName);
+        }
+
+        inserted = 0;
 
         final int rowsInBatch = 1000;
         String url = "https://www.alliancegenome.org/api/homologs/{{TAXON}}?stringencyFilter=stringent&rows="+rowsInBatch+"&start=";
-        url = url.replace("{{TAXON}}", taxon);
+        url = url.replace("{{TAXON}}", genus);
 
         FileDownloader fd = new FileDownloader();
         fd.setDoNotUseHttpClient(true);
 
         for( int start=1; ; start += rowsInBatch ) {
             fd.setExternalFile(url+start);
-            fd.setLocalFile("data/"+taxon+"_"+start+".json");
+            fd.setLocalFile("data/"+genus+"_"+start+".json");
             String localFile = fd.downloadNew();
             int recordsParsed = handleFile(localFile);
             if( recordsParsed==0 ) {
                 break;
             }
+        }
+
+        System.out.println("inserted ortholog count for "+genus+": "+inserted);
+
+        // delete stale orthologs
+        String sql = "SELECT COUNT(0) FROM agr_orthologs WHERE "+
+                " EXISTS( SELECT 1 FROM rgd_ids WHERE gene_rgd_id_1=rgd_id AND species_type_key=? )";
+        int orthologCount = xdao.getCount(sql, speciesTypeKey);
+        System.out.println("total ortholog count for "+genus+": "+orthologCount);
+
+
+        sql = "SELECT * FROM agr_orthologs WHERE last_update_date<? "+
+                "AND EXISTS( SELECT 1 FROM rgd_ids WHERE gene_rgd_id_1=rgd_id AND species_type_key=? )";
+        MappingSqlQuery q = new MappingSqlQuery(xdao.getDataSource(), sql) {
+            @Override
+            protected Object mapRow(ResultSet rs, int rowNum) throws SQLException {
+                int geneRgdId1 = rs.getInt("gene_rgd_id_1");
+                int geneRgdId2 = rs.getInt("gene_rgd_id_2");
+                String conf = rs.getString("confidence");
+                String isBest = rs.getString("is_best_score");
+                String isBestRev = rs.getString("is_best_rev_score");
+                String methodsMatched = rs.getString("methods_matched");
+                String methodsNotMatched = rs.getString("methods_not_matched");
+                String methodsNotCalled = rs.getString("methods_not_called");
+                Date createdDate = rs.getTimestamp("created_date");
+                Date lastUpdateDate = rs.getTimestamp("last_update_date");
+
+                logDel.debug(speciesName+"|RGD1:"+geneRgdId1+"|RGD2:"+geneRgdId2+"|"+conf+
+                    "|IS_BEST:"+isBest+"|IS_BEST_REV:"+isBestRev+"|METHODS_MATCHED:"+methodsMatched+
+                    "|METHODS_NOT_MATCHED:"+methodsNotMatched+"|METHODS_NOT_CALLED:"+methodsNotCalled+
+                    "|CREATED:"+createdDate+"|LAST_UPDATED:"+lastUpdateDate);
+                return null;
+            }
+        };
+        q.declareParameter(new SqlParameter(Types.TIMESTAMP));
+        q.declareParameter(new SqlParameter(Types.INTEGER));
+        q.compile();
+        List staleOrthologs = q.execute(time0, speciesTypeKey);
+        System.out.println(" stale ortholog count for "+genus+": "+staleOrthologs.size());
+
+        if( staleOrthologs.size() > orthologCount ) {
+            System.out.println("*** WARN *** Cannot delete more than 10% of stale orthologs!");
+        } else {
+            sql = "DELETE FROM agr_orthologs WHERE last_update_date<? " +
+                    "AND EXISTS( SELECT 1 FROM rgd_ids WHERE gene_rgd_id_1=rgd_id AND species_type_key=? )";
+            int staleRowsDeleted = xdao.update(sql, time0, speciesTypeKey);
+            System.out.println("stale rows deleted from AGR_ORTHOLOGS for " + genus + ": " + staleRowsDeleted);
         }
     }
 
@@ -119,6 +177,9 @@ public class AgrLoader {
             String methodsNotMatched = "";
             arr = (JSONArray) o.get("predictionMethodsNotMatched");
             for( Object item: arr ) {
+                if( item==null ) {
+                    continue;
+                }
                 if( !methodsNotMatched.isEmpty() ) {
                     methodsNotMatched += ", ";
                 }
@@ -130,7 +191,7 @@ public class AgrLoader {
 
             int r = updateDb(g1.getRgdId(), g2.getRgdId(), confidence, isBestScore, isBestRevScore, methodsMatched, methodsNotMatched, methodsNotCalled);
             if( r==1 ) {
-                linesInserted++;
+                inserted++;
             } else {
                 linesUpdated++;
             }
@@ -189,138 +250,6 @@ public class AgrLoader {
         return gene;
     }
 
-    void runOld() throws Exception {
-
-        int linesInserted = 0;
-        int linesUpdated = 0;
-
-        String fname = "/rgd/orthology_RGD_1.0.0.0_1.json";
-        //String fname = "/rgd/orthology_MGI_1.0.0.0_1.json";
-        //String fname = "/rgd/orthology_Human_1.0.0.0_1.json";
-
-        System.out.println("Loading file "+fname);
-
-        JSONParser parser = new JSONParser();
-        Object obj = parser.parse(new FileReader(fname));
-        JSONObject root = (JSONObject) obj;
-
-        JSONArray records = (JSONArray) root.get("data");
-        System.out.println("parsing data; records="+records.size());
-        for( Object rec: records ) {
-            JSONObject o = (JSONObject) rec;
-            String gene1 = (String) o.get("gene1");
-            //String gene1Species = (String) o.get("gene1Species");
-            String gene2 = (String) o.get("gene2");
-            //String gene2Species = (String) o.get("gene2Species");
-
-            // first species is always rat rgd id, f.e. "DRSC:RGD:1305631"
-            int rgdId1 = getRgdId(gene1);
-            if( rgdId1<=0 ) {
-                continue;
-            }
-
-            // second species: we parse only human and mouse, f.e. "DRSC:HGNC:16486" "DRSC:MGI:1915283"
-            int rgdId2 = getRgdId(gene2);
-            if( rgdId2<=0 ) {
-                continue;
-            }
-
-            String confidence = (String) o.get("confidence");
-            boolean isBestRevScore = (boolean) o.get("isBestRevScore");
-            boolean isBestScore = (boolean) o.get("isBestScore");
-
-            String methodsMatched = "";
-            JSONArray arr = (JSONArray) o.get("predictionMethodsMatched");
-            for( Object item: arr ) {
-                if( !methodsMatched.isEmpty() ) {
-                    methodsMatched += ", ";
-                }
-                methodsMatched += item.toString();
-            }
-
-            String methodsNotCalled = "";
-            arr = (JSONArray) o.get("predictionMethodsNotCalled");
-            for( Object item: arr ) {
-                if( !methodsNotCalled.isEmpty() ) {
-                    methodsNotCalled += ", ";
-                }
-                methodsNotCalled += item.toString();
-            }
-
-            String methodsNotMatched = "";
-            arr = (JSONArray) o.get("predictionMethodsNotMatched");
-            for( Object item: arr ) {
-                if( !methodsNotMatched.isEmpty() ) {
-                    methodsNotMatched += ", ";
-                }
-                methodsNotMatched += item.toString();
-            }
-
-            int r = updateDb(rgdId1, rgdId2, confidence, isBestScore, isBestRevScore, methodsMatched, methodsNotMatched, methodsNotCalled);
-            if( r==1 ) {
-                linesInserted++;
-            } else {
-                linesUpdated++;
-            }
-        }
-
-        System.out.println("===");
-        System.out.println("lines inserted: "+linesInserted);
-        System.out.println("lines updated: "+linesUpdated);
-        System.out.println("lines with other species: "+invalidSpecies);
-        System.out.println("lines HGNC no match: "+noMatchHgnc);
-        System.out.println("lines HGNC multi match: "+multiMatchHgnc);
-        System.out.println("lines MGI no match: "+noMatchMgi);
-        System.out.println("lines MGI multi match: "+multiMatchMgi);
-
-        System.out.println("===");
-        System.out.println("run this: delete from agr_orthologs where last_update_date<sysdate-1");
-    }
-
-    int getRgdId(String geneId) throws Exception {
-        // second species: we parse only human and mouse, f.e. "DRSC:HGNC:16486" "DRSC:MGI:1915283"
-        int rgdId = 0;
-        String accId;
-        if( geneId.startsWith("DRSC:HGNC:") ) {
-            accId = geneId.substring(5);
-
-            List<Gene> genes = xdao.getActiveGenesByXdbId(XdbId.XDB_KEY_HGNC, accId);
-            if( genes.isEmpty() ) {
-                noMatchHgnc++;
-                return -1;
-            }
-            if( genes.size()>1 ) {
-                System.out.println("MULTI: "+accId);
-                multiMatchHgnc++;
-                return -2;
-            }
-            rgdId = genes.get(0).getRgdId();
-
-        } else if( geneId.startsWith("DRSC:MGI:")) {
-            accId = geneId.substring(5);
-
-            List<Gene> genes = xdao.getActiveGenesByXdbId(XdbId.XDB_KEY_MGD, accId);
-            if( genes.isEmpty() ) {
-                noMatchMgi++;
-                return -3;
-            }
-            if( genes.size()>1 ) {
-                System.out.println("MULTI: "+accId);
-                multiMatchMgi++;
-                return -4;
-            }
-            rgdId = genes.get(0).getRgdId();
-
-        } else if( geneId.startsWith("DRSC:RGD:")) {
-            accId = geneId.substring(9);
-            rgdId = Integer.parseInt(accId);
-        } else {
-            invalidSpecies++;
-            return -5;
-        }
-        return rgdId;
-    }
-
     int updateDb(int rgdId1, int rgdId2, String confidence, boolean isBestScore, boolean isBestRevScore,
                   String methodsMatched, String methodsNotMatched, String methodsNotCalled) throws Exception {
 
@@ -331,8 +260,14 @@ public class AgrLoader {
             final String sql = "INSERT INTO agr_orthologs (gene_rgd_id_1, gene_rgd_id_2, confidence, is_best_score, "+
                     "is_best_rev_score, methods_matched, methods_not_matched, methods_not_called, last_update_date) "+
                     "VALUES(?,?,?,?,?,?,?,?,SYSDATE)";
-            xdao.update(sql, rgdId1, rgdId2, confidence, isBestScore?"Y":"N", isBestRevScore?"Y":"N",
+            String bestScore = isBestScore?"Y":"N";
+            String bestRevScore = isBestRevScore?"Y":"N";
+            xdao.update(sql, rgdId1, rgdId2, confidence, bestScore, bestRevScore,
                     methodsMatched, methodsNotMatched, methodsNotCalled);
+
+            logIns.debug("RGD1:"+rgdId1+"|RGD2:"+rgdId2+"|"+confidence+
+                    "|IS_BEST:"+bestScore+"|IS_BEST_REV:"+bestRevScore+"|METHODS_MATCHED:"+methodsMatched+
+                    "|METHODS_NOT_MATCHED:"+methodsNotMatched+"|METHODS_NOT_CALLED:"+methodsNotCalled);
             return 1;
         } else{
             final String sql = "UPDATE agr_orthologs SET confidence=?, is_best_score=?, is_best_rev_score=?, " +
