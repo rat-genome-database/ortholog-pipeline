@@ -43,11 +43,17 @@ public class OrthologRelationLoadingManager {
         return _instance;
     }
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
+
+        DefaultListableBeanFactory bf = new DefaultListableBeanFactory();
+        new XmlBeanDefinitionReader(bf).loadBeanDefinitions(new FileSystemResource("properties/AppConfigure.xml"));
+        _instance = (OrthologRelationLoadingManager) (bf.getBean("orthologRelationLoadingManager"));
 
         // parse cmd line params
         int speciesTypeKey = SpeciesType.ALL;
         boolean fixXrefDataSet = false;
+        boolean agrOrthologs = false;
+
         for( int i=0; i<args.length; i++ ) {
             switch(args[i]) {
                 case "--fixXRefDataSet":
@@ -56,19 +62,26 @@ public class OrthologRelationLoadingManager {
                 case "--species":
                     speciesTypeKey = SpeciesType.parse(args[++i]);
                     break;
+                case "--agrOrthologs":
+                    agrOrthologs = true;
+                    break;
             }
-        }
-        if( speciesTypeKey==SpeciesType.ALL || speciesTypeKey==SpeciesType.HUMAN ) {
-            System.out.println("ERROR: --cmdline parameter --species not specified or --species==human");
-            System.exit(-1);
-            return;
         }
 
         // run the instance
-        DefaultListableBeanFactory bf = new DefaultListableBeanFactory();
-        new XmlBeanDefinitionReader(bf).loadBeanDefinitions(new FileSystemResource("properties/AppConfigure.xml"));
-        _instance = (OrthologRelationLoadingManager) (bf.getBean("orthologRelationLoadingManager"));
         try {
+            if( agrOrthologs ) {
+                AgrLoader agrLoader = (AgrLoader) (bf.getBean("agrLoader"));
+                agrLoader.run();
+                return;
+            }
+
+            if( speciesTypeKey==SpeciesType.ALL || speciesTypeKey==SpeciesType.HUMAN ) {
+                System.out.println("ERROR: --cmdline parameter --species not specified or --species==human");
+                System.exit(-1);
+                return;
+            }
+
             if( fixXrefDataSet ) {
                 _instance.fixXrefDataSet();
             } else {
@@ -78,6 +91,7 @@ public class OrthologRelationLoadingManager {
         catch( Exception e ) {
             _instance.process.error("CRITICAL ERROR", e);
             e.printStackTrace();
+            throw e;
         }
     }
         

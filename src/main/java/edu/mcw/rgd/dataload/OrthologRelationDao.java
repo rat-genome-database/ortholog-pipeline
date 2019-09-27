@@ -574,16 +574,21 @@ public class OrthologRelationDao {
         Gene gene = new Gene();
         gene.setRgdId(id.getRgdId());
         gene.setSymbol(geneSymbol);
+        gene.setSpeciesTypeKey(speciesTypeKey);
         geneDAO.insertGene(gene);
 
+        insertAgrGeneXdbId(id.getRgdId(), agrGeneId);
+
+        return gene;
+    }
+
+    void insertAgrGeneXdbId(int geneRgdId, String accId) throws Exception {
         XdbId xdbId = new XdbId();
-        xdbId.setRgdId(id.getRgdId());
-        xdbId.setAccId(agrGeneId);
+        xdbId.setRgdId(geneRgdId);
+        xdbId.setAccId(accId);
         xdbId.setXdbKey(63);
         xdbId.setSrcPipeline("AgrOrtholog");
         xdbIdDAO.insertXdb(xdbId);
-
-        return gene;
     }
 
     public List<String> getCrossLinkedOrthologs(int speciesTypeKey) throws Exception {

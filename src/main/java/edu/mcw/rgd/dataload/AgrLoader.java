@@ -13,7 +13,6 @@ import org.json.simple.parser.JSONParser;
 import org.springframework.jdbc.core.SqlParameter;
 import org.springframework.jdbc.object.MappingSqlQuery;
 
-import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -32,17 +31,11 @@ public class AgrLoader {
     Logger logIns = Logger.getLogger("insertedAgrOrthologs");
 
     int inserted = 0;
+    private Set<String> processedSpecies;
 
-    public static void main(String[] args) throws Exception {
+    public void run() throws Exception {
 
-        AgrLoader loader = new AgrLoader();
-        loader.run();
-    }
-
-    void run() throws Exception {
-
-        String[] species = { "human", "mouse", "rat", "zebrafish", "fly", "roundworm", "yeast" };
-        List<String> speciesList = new ArrayList<>(Arrays.asList(species));
+        List<String> speciesList = new ArrayList<>(getProcessedSpecies());
         Collections.shuffle(speciesList);
 
         for( String speciesName: speciesList ) {
@@ -53,7 +46,11 @@ public class AgrLoader {
 
     void run( String speciesName ) throws Exception {
 
-        Date time0 = new Date();
+        // note: there could be disparity between oracle server time and the time on machine the pipeline is running,
+        //  so to prevent deletion of valid orthologs (classified by the code as 'stale orthologs'),
+        //  we use the as the cutoff timestamp the machine timestamp minus one day
+        Date time0 = Utils.addDaysToDate(new Date(), -1); // time0 = current day-and-time less 1 day
+
         int speciesTypeKey = SpeciesType.parse(speciesName);
         String genus = SpeciesType.getOrganismGenus(speciesTypeKey); // f.e. 'Rattus'
         if( Utils.isStringEmpty(genus) ) {
@@ -73,7 +70,7 @@ public class AgrLoader {
             fd.setExternalFile(url+start);
             fd.setLocalFile("data/"+genus+"_"+start+".json");
             String localFile = fd.downloadNew();
-            int recordsParsed = handleFile(localFile);
+            int recordsParsed = handleFile(localFile, speciesTypeKey);
             if( recordsParsed==0 ) {
                 break;
             }
@@ -127,7 +124,7 @@ public class AgrLoader {
         }
     }
 
-    int handleFile(String fileName) throws Exception {
+    int handleFile(String fileName, int speciesTypeKey) throws Exception {
 
         int linesInserted = 0;
         int linesUpdated = 0;
@@ -146,12 +143,22 @@ public class AgrLoader {
             String geneSymbol = (String) gene1.get("symbol");
             String geneId = (String) gene1.get("geneID");
             Gene g1 = resolveGene(speciesName, geneSymbol, geneId);
-
+            if( g1==null ) {
+                System.out.println("WARN: cannot resolve gene ["+geneSymbol+"] ["+geneId+"] "+speciesName);
+                continue;
+            }
+            if( g1.getSpeciesTypeKey()!=speciesTypeKey ) {
+                System.out.println("unexpected first species type key "+g1.getSpeciesTypeKey());
+            }
             JSONObject gene2 = (JSONObject) o.get("homologGene");
             speciesName = (String) gene2.get("speciesName");
             geneSymbol = (String) gene2.get("symbol");
             geneId = (String) gene2.get("geneID");
             Gene g2 = resolveGene(speciesName, geneSymbol, geneId);
+            if( g2==null ) {
+                System.out.println("WARN: cannot resolve gene ["+geneSymbol+"] ["+geneId+"] "+speciesName);
+                continue;
+            }
 
             boolean isBestRevScore = (boolean) o.get("best");
             boolean isBestScore = (boolean) o.get("bestReverse");
@@ -177,9 +184,6 @@ public class AgrLoader {
             String methodsNotMatched = "";
             arr = (JSONArray) o.get("predictionMethodsNotMatched");
             for( Object item: arr ) {
-                if( item==null ) {
-                    continue;
-                }
                 if( !methodsNotMatched.isEmpty() ) {
                     methodsNotMatched += ", ";
                 }
@@ -204,24 +208,42 @@ public class AgrLoader {
         int speciesTypeKey = SpeciesType.parse(speciesName);
         if( speciesTypeKey <= 0 ) {
             System.out.println("SP problem");
+            return null;
         }
         Gene gene = null;
 
         // first resolve by xdb id
-        if( speciesTypeKey==SpeciesType.RAT ) {
-            int geneRgdId = Integer.parseInt(geneId.substring(4));
-            gene = dao.getGeneByRgdId(geneRgdId);
-        } else {
-            int xdbKey = speciesTypeKey==SpeciesType.HUMAN ? XdbId.XDB_KEY_HGNC
-                    : speciesTypeKey==SpeciesType.MOUSE ? XdbId.XDB_KEY_MGD
-                    : 63; // AGR_GENE
+        int xdbKey = 63; // AGR_GENE
+        List<Gene> genes = dao.getGenesByXdbId(geneId, xdbKey);
+        if( genes.size()>1 ) {
+            throw new Exception("multiple genes for "+geneId);
+        }
+        if( !genes.isEmpty() ) {
+            gene = genes.get(0);
+        }
 
-            List<Gene> genes = dao.getGenesByXdbId(geneId, xdbKey);
-            if( genes.size()>1 ) {
-                throw new Exception("multiple HGNC ids for "+geneId);
+        // second: special resolution for rat,mouse,human
+        if( gene==null ) {
+            if( speciesTypeKey==SpeciesType.RAT ) {
+                int geneRgdId = Integer.parseInt(geneId.substring(4));
+                gene = dao.getGeneByRgdId(geneRgdId);
             }
-            if( !genes.isEmpty() ) {
-                gene = genes.get(0);
+            else if( speciesTypeKey==SpeciesType.MOUSE ) {
+                genes = dao.getGenesByXdbId(geneId, XdbId.XDB_KEY_MGD);
+                if( !genes.isEmpty() ) {
+                    gene = genes.get(0);
+                }
+            }
+            else if( speciesTypeKey==SpeciesType.HUMAN ) {
+                genes = dao.getGenesByXdbId(geneId, XdbId.XDB_KEY_HGNC);
+                if( !genes.isEmpty() ) {
+                    gene = genes.get(0);
+                }
+            }
+
+            if( gene!=null ) {
+                // gene resolved: insert AGR_GENE xdbid
+                dao.insertAgrGeneXdbId(gene.getRgdId(), geneId);
             }
         }
 
@@ -238,12 +260,7 @@ public class AgrLoader {
             if( speciesTypeKey==SpeciesType.ZEBRAFISH ) {
                 List<XdbId> xdbIds = xdao.getXdbIdsByRgdId(63, gene.getRgdId());
                 if( xdbIds.isEmpty() ) {
-                    XdbId xdbId = new XdbId();
-                    xdbId.setAccId(geneId);
-                    xdbId.setRgdId(gene.getRgdId());
-                    xdbId.setXdbKey(63);
-                    xdbId.setSrcPipeline("AgrOrtholog");
-                    xdao.insertXdb(xdbId);
+                    dao.insertAgrGeneXdbId(gene.getRgdId(), geneId);
                 }
             }
         }
@@ -253,6 +270,9 @@ public class AgrLoader {
     int updateDb(int rgdId1, int rgdId2, String confidence, boolean isBestScore, boolean isBestRevScore,
                   String methodsMatched, String methodsNotMatched, String methodsNotCalled) throws Exception {
 
+        String bestScore = isBestScore?"Y":"N";
+        String bestRevScore = isBestRevScore?"Y":"N";
+
         String sql1 = "SELECT COUNT(0) FROM agr_orthologs WHERE gene_rgd_id_1=? AND gene_rgd_id_2=? AND methods_matched=?";
         int dataExists =  xdao.getCount(sql1, rgdId1, rgdId2, methodsMatched);
         if( dataExists==0 ) {
@@ -260,8 +280,6 @@ public class AgrLoader {
             final String sql = "INSERT INTO agr_orthologs (gene_rgd_id_1, gene_rgd_id_2, confidence, is_best_score, "+
                     "is_best_rev_score, methods_matched, methods_not_matched, methods_not_called, last_update_date) "+
                     "VALUES(?,?,?,?,?,?,?,?,SYSDATE)";
-            String bestScore = isBestScore?"Y":"N";
-            String bestRevScore = isBestRevScore?"Y":"N";
             xdao.update(sql, rgdId1, rgdId2, confidence, bestScore, bestRevScore,
                     methodsMatched, methodsNotMatched, methodsNotCalled);
 
@@ -273,9 +291,18 @@ public class AgrLoader {
             final String sql = "UPDATE agr_orthologs SET confidence=?, is_best_score=?, is_best_rev_score=?, " +
                     "methods_not_matched=?, methods_not_called=?, last_update_date=SYSDATE " +
                     "WHERE gene_rgd_id_1=? AND gene_rgd_id_2=? AND methods_matched=?";
-            xdao.update(sql, confidence, isBestScore?"Y":"N", isBestRevScore?"Y":"N",
+
+            xdao.update(sql, confidence, bestScore, bestRevScore,
                     methodsNotMatched, methodsNotCalled, rgdId1, rgdId2, methodsMatched);
             return 0;
         }
+    }
+
+    public void setProcessedSpecies(Set<String> processedSpecies) {
+        this.processedSpecies = processedSpecies;
+    }
+
+    public Set<String> getProcessedSpecies() {
+        return processedSpecies;
     }
 }

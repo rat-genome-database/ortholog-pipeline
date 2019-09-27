@@ -1,7 +1,7 @@
 <!DOCTYPE beans PUBLIC "-//SPRING//DTD BEAN//EN" "http://www.springframework.org/dtd/spring-beans.dtd">
 <beans>
 	<bean id="orthologRelationLoadingManager" class="edu.mcw.rgd.dataload.OrthologRelationLoadingManager">
-        <property name="version" value="Ortholog Relation Loader v. 2.3.11 (Jan 29, 2019)"/>
+        <property name="version" value="Ortholog Relation Loader   build Sep 27, 2019"/>
 		<property name="orthologRelationParser" ref="orthologRelationParser"/>
 		<property name="orthologRelationLoader" ref="orthologRelationLoader"/>
 		<property name="rgdLogger" ref="rgdLogger"/>
@@ -44,6 +44,20 @@
 			</set>
 		</property>
     </bean>
+
+	<bean id="agrLoader" class="edu.mcw.rgd.dataload.AgrLoader">
+		<property name="processedSpecies">
+			<set>
+				<value>rat</value>
+				<value>human</value>
+				<value>mouse</value>
+				<value>zebrafish</value>
+				<value>fly</value>
+				<value>roundworm</value>
+				<value>yeast</value>
+			</set>
+		</property>
+	</bean>
 </beans>
 
 
