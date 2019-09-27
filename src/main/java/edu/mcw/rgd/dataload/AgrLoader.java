@@ -214,11 +214,6 @@ public class AgrLoader {
 
     Gene resolveGene(String speciesName, String geneSymbol, String geneId) throws Exception {
 
-        // taxon fix up for species
-        if( speciesName.equals("NCBITaxon:559292") ) {
-            speciesName = "NCBITaxon:4932";
-        }
-
         if( speciesName.startsWith("NCBITaxon:") ) {
             speciesName = "taxon:"+speciesName.substring(10);
         }
