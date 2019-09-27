@@ -13,10 +13,13 @@ import org.json.simple.parser.JSONParser;
 import org.springframework.jdbc.core.SqlParameter;
 import org.springframework.jdbc.object.MappingSqlQuery;
 
+import java.io.File;
 import java.io.FileReader;
+import java.io.FilenameFilter;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
+import java.text.ParseException;
 import java.util.*;
 
 /**
@@ -55,6 +58,12 @@ public class AgrLoader {
         String genus = SpeciesType.getOrganismGenus(speciesTypeKey); // f.e. 'Rattus'
         if( Utils.isStringEmpty(genus) ) {
             throw new Exception("ERROR: unknown species "+speciesName);
+        }
+
+        // delete json files from AGR that are older than 10 days
+        int filesDeleted = deleteOldJsonFiles(genus, 10);
+        if( filesDeleted>0 ) {
+            System.out.println("deleted old json files: "+filesDeleted);
         }
 
         inserted = 0;
@@ -139,9 +148,9 @@ public class AgrLoader {
             JSONObject o = (JSONObject) rec;
 
             JSONObject gene1 = (JSONObject) o.get("gene");
-            String speciesName = (String) gene1.get("speciesName");
+            String speciesName = (String) gene1.get("taxonId");
             String geneSymbol = (String) gene1.get("symbol");
-            String geneId = (String) gene1.get("geneID");
+            String geneId = (String) gene1.get("id");
             Gene g1 = resolveGene(speciesName, geneSymbol, geneId);
             if( g1==null ) {
                 System.out.println("WARN: cannot resolve gene ["+geneSymbol+"] ["+geneId+"] "+speciesName);
@@ -151,17 +160,17 @@ public class AgrLoader {
                 System.out.println("unexpected first species type key "+g1.getSpeciesTypeKey());
             }
             JSONObject gene2 = (JSONObject) o.get("homologGene");
-            speciesName = (String) gene2.get("speciesName");
+            speciesName = (String) gene2.get("taxonId");
             geneSymbol = (String) gene2.get("symbol");
-            geneId = (String) gene2.get("geneID");
+            geneId = (String) gene2.get("id");
             Gene g2 = resolveGene(speciesName, geneSymbol, geneId);
             if( g2==null ) {
                 System.out.println("WARN: cannot resolve gene ["+geneSymbol+"] ["+geneId+"] "+speciesName);
                 continue;
             }
 
-            boolean isBestRevScore = (boolean) o.get("best");
-            boolean isBestScore = (boolean) o.get("bestReverse");
+            boolean isBestScore = o.get("best").equals("yes");
+            boolean isBestRevScore = o.get("bestReverse").equals("Yes");
 
             String methodsMatched = "";
             JSONArray arr = (JSONArray) o.get("predictionMethodsMatched");
@@ -205,9 +214,18 @@ public class AgrLoader {
 
     Gene resolveGene(String speciesName, String geneSymbol, String geneId) throws Exception {
 
+        // taxon fix up for species
+        if( speciesName.equals("NCBITaxon:559292") ) {
+            speciesName = "NCBITaxon:4932";
+        }
+
+        if( speciesName.startsWith("NCBITaxon:") ) {
+            speciesName = "taxon:"+speciesName.substring(10);
+        }
+
         int speciesTypeKey = SpeciesType.parse(speciesName);
         if( speciesTypeKey <= 0 ) {
-            System.out.println("SP problem");
+            System.out.println("SP problem: speciesName ["+speciesName+" geneSymbol ["+geneSymbol+"] geneId ["+geneId+"]");
             return null;
         }
         Gene gene = null;
@@ -296,6 +314,35 @@ public class AgrLoader {
                     methodsNotMatched, methodsNotCalled, rgdId1, rgdId2, methodsMatched);
             return 0;
         }
+    }
+
+    int deleteOldJsonFiles( String genus, int dateOffset ) throws ParseException {
+
+        Date cutoffDate = Utils.addDaysToDate(new Date(), -dateOffset);
+        int filesDeleted = 0;
+
+        File dir = new File("data");
+        File [] files = dir.listFiles(new FilenameFilter() {
+            @Override
+            public boolean accept(File dir, String name) {
+                return name.startsWith(genus) && name.endsWith(".json");
+            }
+        });
+
+        for( File f: files ) {
+            // delete files older than 10 days
+            if( f.lastModified() < cutoffDate.getTime() ) {
+                f.delete();
+                filesDeleted++;
+                continue;
+            }
+            // also delete files with 0 size
+            if( f.length()==0 ) {
+                f.delete();
+                filesDeleted++;
+            }
+        }
+        return filesDeleted;
     }
 
     public void setProcessedSpecies(Set<String> processedSpecies) {

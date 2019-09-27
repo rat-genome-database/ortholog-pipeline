@@ -4,7 +4,8 @@ TODO: logRgd -- inacurate, must be species-specific
 
 Sep 27, 2019
   created script loadAgrOrthologs.sh
-  
+  updated parser and added removal of old cached json files
+
 v. 2.3.11 Jan 29, 2019
   added support for PIG
 
