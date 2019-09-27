@@ -21,6 +21,7 @@ import java.sql.SQLException;
 import java.sql.Types;
 import java.text.ParseException;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Created by mtutaj on 3/14/2018.
@@ -33,21 +34,31 @@ public class AgrLoader {
     Logger logDel = Logger.getLogger("deletedAgrOrthologs");
     Logger logIns = Logger.getLogger("insertedAgrOrthologs");
 
-    int inserted = 0;
     private Set<String> processedSpecies;
 
     public void run() throws Exception {
 
-        List<String> speciesList = new ArrayList<>(getProcessedSpecies());
-        Collections.shuffle(speciesList);
+        if( false ) {
+            List<String> speciesList = new ArrayList<>(getProcessedSpecies());
+            Collections.shuffle(speciesList);
 
-        for( String speciesName: speciesList ) {
-            System.out.println("starting "+speciesName);
-            run(speciesName);
+            for (String speciesName : speciesList) {
+                run(speciesName);
+            }
+        } else {
+            getProcessedSpecies().parallelStream().forEach( speciesName -> {
+                try {
+                    run(speciesName);
+                } catch(Exception e) {
+                    throw new RuntimeException(e);
+                }
+            });
         }
     }
 
     void run( String speciesName ) throws Exception {
+
+        System.out.println("starting " + speciesName);
 
         // note: there could be disparity between oracle server time and the time on machine the pipeline is running,
         //  so to prevent deletion of valid orthologs (classified by the code as 'stale orthologs'),
@@ -63,10 +74,11 @@ public class AgrLoader {
         // delete json files from AGR that are older than 10 days
         int filesDeleted = deleteOldJsonFiles(genus, 10);
         if( filesDeleted>0 ) {
-            System.out.println("deleted old json files: "+filesDeleted);
+            System.out.println("deleted old json files for "+speciesName+": "+filesDeleted);
         }
 
-        inserted = 0;
+        AtomicInteger inserted = new AtomicInteger(0);
+        AtomicInteger updated = new AtomicInteger(0);
 
         final int rowsInBatch = 1000;
         String url = "https://www.alliancegenome.org/api/homologs/{{TAXON}}?stringencyFilter=stringent&rows="+rowsInBatch+"&start=";
@@ -79,13 +91,14 @@ public class AgrLoader {
             fd.setExternalFile(url+start);
             fd.setLocalFile("data/"+genus+"_"+start+".json");
             String localFile = fd.downloadNew();
-            int recordsParsed = handleFile(localFile, speciesTypeKey);
+            int recordsParsed = handleFile(localFile, speciesTypeKey, inserted, updated);
             if( recordsParsed==0 ) {
                 break;
             }
         }
 
-        System.out.println("inserted ortholog count for "+genus+": "+inserted);
+        System.out.println("inserted orthologs for "+genus+": "+inserted);
+        System.out.println("updated  orthologs for "+genus+": "+updated);
 
         // delete stale orthologs
         String sql = "SELECT COUNT(0) FROM agr_orthologs WHERE "+
@@ -133,10 +146,7 @@ public class AgrLoader {
         }
     }
 
-    int handleFile(String fileName, int speciesTypeKey) throws Exception {
-
-        int linesInserted = 0;
-        int linesUpdated = 0;
+    int handleFile(String fileName, int speciesTypeKey, AtomicInteger inserted, AtomicInteger updated) throws Exception {
 
         JSONParser parser = new JSONParser();
         Object obj = parser.parse(new FileReader(fileName));
@@ -204,9 +214,9 @@ public class AgrLoader {
 
             int r = updateDb(g1.getRgdId(), g2.getRgdId(), confidence, isBestScore, isBestRevScore, methodsMatched, methodsNotMatched, methodsNotCalled);
             if( r==1 ) {
-                inserted++;
+                inserted.incrementAndGet();
             } else {
-                linesUpdated++;
+                updated.incrementAndGet();
             }
         }
         return records.size();
