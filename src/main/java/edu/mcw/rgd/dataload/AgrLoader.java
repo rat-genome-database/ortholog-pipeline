@@ -224,10 +224,6 @@ public class AgrLoader {
 
     Gene resolveGene(String speciesName, String geneSymbol, String geneId) throws Exception {
 
-        if( speciesName.startsWith("NCBITaxon:") ) {
-            speciesName = "taxon:"+speciesName.substring(10);
-        }
-
         int speciesTypeKey = SpeciesType.parse(speciesName);
         if( speciesTypeKey <= 0 ) {
             System.out.println("SP problem: speciesName ["+speciesName+" geneSymbol ["+geneSymbol+"] geneId ["+geneId+"]");
