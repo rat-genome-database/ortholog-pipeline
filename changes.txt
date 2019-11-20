@@ -2,6 +2,9 @@ TODO: generate rat_genes_without_orthologs file
 TODO: generate multi ortholog assignment for rat
 TODO: logRgd -- inacurate, must be species-specific
 
+Nov 20, 2019
+  agr loader: implemented log4j logging
+
 Sep 30, 2019
   simplified taxon parsing (due to rgdcore update)
 

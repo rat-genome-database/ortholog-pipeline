@@ -31,34 +31,33 @@ public class AgrLoader {
     XdbIdDAO xdao = new XdbIdDAO();
     OrthologRelationDao dao = new OrthologRelationDao();
 
+    Logger log = Logger.getLogger("agrStatus");
     Logger logDel = Logger.getLogger("deletedAgrOrthologs");
     Logger logIns = Logger.getLogger("insertedAgrOrthologs");
 
     private Set<String> processedSpecies;
+    private String allianceFile;
 
     public void run() throws Exception {
 
-        if( false ) {
-            List<String> speciesList = new ArrayList<>(getProcessedSpecies());
-            Collections.shuffle(speciesList);
-
-            for (String speciesName : speciesList) {
-                run(speciesName);
-            }
-        } else {
-            getProcessedSpecies().parallelStream().forEach( speciesName -> {
+        try {
+            getProcessedSpecies().parallelStream().forEach(speciesName -> {
                 try {
                     run(speciesName);
-                } catch(Exception e) {
+                } catch (Exception e) {
+                    Utils.printStackTrace(e, log);
                     throw new RuntimeException(e);
                 }
             });
+        } catch(Exception e) {
+            Utils.printStackTrace(e, log);
+            throw e;
         }
     }
 
     void run( String speciesName ) throws Exception {
 
-        System.out.println("starting " + speciesName);
+        log.info("starting " + speciesName);
 
         // note: there could be disparity between oracle server time and the time on machine the pipeline is running,
         //  so to prevent deletion of valid orthologs (classified by the code as 'stale orthologs'),
@@ -74,15 +73,16 @@ public class AgrLoader {
         // delete json files from AGR that are older than 10 days
         int filesDeleted = deleteOldJsonFiles(genus, 10);
         if( filesDeleted>0 ) {
-            System.out.println("deleted old json files for "+speciesName+": "+filesDeleted);
+            log.info("deleted old json files for "+speciesName+": "+filesDeleted);
         }
 
         AtomicInteger inserted = new AtomicInteger(0);
         AtomicInteger updated = new AtomicInteger(0);
 
         final int rowsInBatch = 1000;
-        String url = "https://www.alliancegenome.org/api/homologs/{{TAXON}}?stringencyFilter=stringent&rows="+rowsInBatch+"&start=";
+        String url = getAllianceFile();
         url = url.replace("{{TAXON}}", genus);
+        url = url.replace("{{ROWS_IN_BATCH}}", Integer.toString(rowsInBatch));
 
         FileDownloader fd = new FileDownloader();
         fd.setDoNotUseHttpClient(true);
@@ -97,14 +97,14 @@ public class AgrLoader {
             }
         }
 
-        System.out.println("inserted orthologs for "+genus+": "+inserted);
-        System.out.println("updated  orthologs for "+genus+": "+updated);
+        log.info("inserted orthologs for "+genus+": "+inserted);
+        log.info("updated  orthologs for "+genus+": "+updated);
 
         // delete stale orthologs
         String sql = "SELECT COUNT(0) FROM agr_orthologs WHERE "+
                 " EXISTS( SELECT 1 FROM rgd_ids WHERE gene_rgd_id_1=rgd_id AND species_type_key=? )";
         int orthologCount = xdao.getCount(sql, speciesTypeKey);
-        System.out.println("total ortholog count for "+genus+": "+orthologCount);
+        log.info("total ortholog count for "+genus+": "+orthologCount);
 
 
         sql = "SELECT * FROM agr_orthologs WHERE last_update_date<? "+
@@ -134,15 +134,15 @@ public class AgrLoader {
         q.declareParameter(new SqlParameter(Types.INTEGER));
         q.compile();
         List staleOrthologs = q.execute(time0, speciesTypeKey);
-        System.out.println(" stale ortholog count for "+genus+": "+staleOrthologs.size());
+        log.info(" stale ortholog count for "+genus+": "+staleOrthologs.size());
 
         if( staleOrthologs.size() > orthologCount ) {
-            System.out.println("*** WARN *** Cannot delete more than 10% of stale orthologs!");
+            log.warn("*** WARN *** Cannot delete more than 10% of stale orthologs!");
         } else {
             sql = "DELETE FROM agr_orthologs WHERE last_update_date<? " +
                     "AND EXISTS( SELECT 1 FROM rgd_ids WHERE gene_rgd_id_1=rgd_id AND species_type_key=? )";
             int staleRowsDeleted = xdao.update(sql, time0, speciesTypeKey);
-            System.out.println("stale rows deleted from AGR_ORTHOLOGS for " + genus + ": " + staleRowsDeleted);
+            log.info("stale rows deleted from AGR_ORTHOLOGS for " + genus + ": " + staleRowsDeleted);
         }
     }
 
@@ -153,7 +153,7 @@ public class AgrLoader {
         JSONObject root = (JSONObject) obj;
 
         JSONArray records = (JSONArray) root.get("results");
-        System.out.println("parsing "+fileName+"; records="+records.size());
+        log.debug("parsing "+fileName+"; records="+records.size());
         for( Object rec: records ) {
             JSONObject o = (JSONObject) rec;
 
@@ -163,11 +163,11 @@ public class AgrLoader {
             String geneId = (String) gene1.get("id");
             Gene g1 = resolveGene(speciesName, geneSymbol, geneId);
             if( g1==null ) {
-                System.out.println("WARN: cannot resolve gene ["+geneSymbol+"] ["+geneId+"] "+speciesName);
+                log.warn("WARN: cannot resolve gene ["+geneSymbol+"] ["+geneId+"] "+speciesName);
                 continue;
             }
             if( g1.getSpeciesTypeKey()!=speciesTypeKey ) {
-                System.out.println("unexpected first species type key "+g1.getSpeciesTypeKey());
+                log.warn("unexpected first species type key "+g1.getSpeciesTypeKey());
             }
             JSONObject gene2 = (JSONObject) o.get("homologGene");
             speciesName = (String) gene2.get("taxonId");
@@ -175,7 +175,7 @@ public class AgrLoader {
             geneId = (String) gene2.get("id");
             Gene g2 = resolveGene(speciesName, geneSymbol, geneId);
             if( g2==null ) {
-                System.out.println("WARN: cannot resolve gene ["+geneSymbol+"] ["+geneId+"] "+speciesName);
+                log.warn("WARN: cannot resolve gene ["+geneSymbol+"] ["+geneId+"] "+speciesName);
                 continue;
             }
 
@@ -226,7 +226,7 @@ public class AgrLoader {
 
         int speciesTypeKey = SpeciesType.parse(speciesName);
         if( speciesTypeKey <= 0 ) {
-            System.out.println("SP problem: speciesName ["+speciesName+" geneSymbol ["+geneSymbol+"] geneId ["+geneId+"]");
+            log.warn("SP problem: speciesName ["+speciesName+" geneSymbol ["+geneSymbol+"] geneId ["+geneId+"]");
             return null;
         }
         Gene gene = null;
@@ -352,5 +352,13 @@ public class AgrLoader {
 
     public Set<String> getProcessedSpecies() {
         return processedSpecies;
+    }
+
+    public void setAllianceFile(String allianceFile) {
+        this.allianceFile = allianceFile;
+    }
+
+    public String getAllianceFile() {
+        return allianceFile;
     }
 }
