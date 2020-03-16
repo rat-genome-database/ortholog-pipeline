@@ -1,14 +1,10 @@
 package edu.mcw.rgd.dataload;
 
-import edu.mcw.rgd.pipelines.PipelineRecord;
-
 /*
- * Created on Mar 22, 2007
- * $Revision: 1.3 $
- * $Date: 2007/04/13 20:34:30 $
+ * @since Mar 22, 2007
  * @author dli
  */
-public class OrthologRelation extends PipelineRecord {
+public class OrthologRelation {
     int srcRgdId;
     int destRgdId;
     int srcSpeciesTypeKey;

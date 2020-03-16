@@ -2,6 +2,9 @@ TODO: generate rat_genes_without_orthologs file
 TODO: generate multi ortholog assignment for rat
 TODO: logRgd -- inacurate, must be species-specific
 
+Mar 16, 2020
+  simplified code to use java8 parallel streams
+
 Jan 31, 2020
   added support for vervet (green monkey) and naked mole rat
 

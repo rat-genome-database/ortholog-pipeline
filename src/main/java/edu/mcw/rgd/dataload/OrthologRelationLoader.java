@@ -6,11 +6,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import edu.mcw.rgd.datamodel.Association;
 import edu.mcw.rgd.datamodel.Ortholog;
 import edu.mcw.rgd.datamodel.SpeciesType;
+import edu.mcw.rgd.process.CounterPool;
 import edu.mcw.rgd.process.Utils;
-import edu.mcw.rgd.pipelines.PipelineManager;
-import edu.mcw.rgd.pipelines.PipelineRecord;
-import edu.mcw.rgd.pipelines.RecordPreprocessor;
-import edu.mcw.rgd.pipelines.RecordProcessor;
 import org.apache.log4j.Logger;
 
 /*
@@ -25,13 +22,8 @@ public class OrthologRelationLoader {
     final String unmatched="unmatched";
     final String multiple="multiple";
     final String withdrawn="withdrawn";
-    int unMatchedC=0;
-    int multipleMatchC=0;
-    int matchedC=0;   
-    int withdrawnC=0;
-    int rowsDeleted=0;
-    int rowsInserted=0;
-    
+    CounterPool counters;
+
     protected final Logger loggerMatched = Logger.getLogger("Matched");
     protected final Logger loggerUnmatch = Logger.getLogger("Unmatched");
     protected final Logger multipleMatch = Logger.getLogger("MultipleMatch");
@@ -42,6 +34,9 @@ public class OrthologRelationLoader {
     private int createdBy; // curation user id for the pipeline
 
     public void run(List<OrthologRelation> orthologRelations, int speciesTypeKey) throws Exception {
+
+        counters = new CounterPool();
+
         setOrthologRelations(orthologRelations);
 
         matchRgdId();
@@ -210,98 +205,91 @@ public class OrthologRelationLoader {
         // must be synchronized because multiple threads could modify the map at the same time
         final Map<String, String> egIdRgdId = new ConcurrentHashMap<>();
 
-        // perform this database-intensive qc in 8 parallel process for better throughput
-        PipelineManager manager = new PipelineManager();
-        manager.addPipelineWorkgroup(new RecordPreprocessor(){
-            public void process() throws Exception {
-                int recno = 0;
-                for (OrthologRelation orRel:orthologRelations) {
-                    orRel.setRecNo(++recno);
-                    getSession().putRecordToFirstQueue(orRel);
-                }
+        List<OrthologRelation> incomingRecords = new ArrayList<>(orthologRelations.size());
+        for (OrthologRelation orRel:orthologRelations) {
+            incomingRecords.add(orRel);
+        }
 
-                getSession().putRecordToFirstQueue(null); // signal end of processing
+        incomingRecords.parallelStream().forEach( orRel -> {
+
+            String idSrc=orRel.getSrcOtherId(); //the source eg id
+            String idDest=orRel.getDestOtherId(); // the destination eg id
+            String srcRgdId; // the source rgd id
+            String destRgdId; // the source eg id
+
+            process.debug("QC EGSRC="+idSrc+", EGDST="+idDest);
+
+            // processing source first, if the source couldn't be matched, don't process destination any more
+            // first check if the query is already made and stored in egIdRgdId map
+            if (egIdRgdId.get(idSrc)==null) {
+                // if the query is not made yet, make the query and store it in the map
+                String rgdId=getRgdIdByEgId(idSrc);
+                egIdRgdId.put(idSrc,rgdId);
+                srcRgdId=rgdId;
+            } else {
+                // the query is already made, take it from the map
+                srcRgdId = egIdRgdId.get(idSrc);
             }
-        }, "PP", 1, 0);
-
-        manager.addPipelineWorkgroup(new RecordProcessor() {
-            @Override
-            public void process(PipelineRecord pipelineRecord) throws Exception {
-                OrthologRelation orRel = (OrthologRelation) pipelineRecord;
-
-                String idSrc=orRel.getSrcOtherId(); //the source eg id
-                String idDest=orRel.getDestOtherId(); // the destination eg id
-                String srcRgdId; // the source rgd id
-                String destRgdId; // the source eg id
-
-                process.debug("QC EGSRC="+idSrc+", EGDST="+idDest);
-
-                // processing source first, if the source couldn't be matched, don't process destination any more
-                // first check if the query is already made and stored in egIdRgdId map
-                if (egIdRgdId.get(idSrc)==null) {
-                    // if the query is not made yet, make the query and store it in the map
-                    String rgdId=getRgdIdByEgId(idSrc);
-                    egIdRgdId.put(idSrc,rgdId);
-                    srcRgdId=rgdId;
-                } else {
-                    // the query is already made, take it from the map
-                    srcRgdId = egIdRgdId.get(idSrc);
-                }
-                if (srcRgdId.contains(multiple)) {
-                    multipleMatch.error("EGID:"+idSrc+"\t"+srcRgdId+"\t"+orRel.getSrcSpeciesTypeKey());
-                    multipleMatchC++;
-                    return;
-                }
-                else if (srcRgdId.contains(unmatched)) {
-                    loggerUnmatch.error("EGID:"+ idSrc +"\t" +orRel.getSrcSpeciesTypeKey());
-                    unMatchedC++;
-                    return;
-                }
-                else if (srcRgdId.contains(withdrawn)) {
-                    loggerWithdrawn.error("EGID:"+ idSrc +"\t"+srcRgdId+"\t" +orRel.getSrcSpeciesTypeKey());
-                    withdrawnC++;
-                    return;
-                }
-                //processing destination
-                // first check if the query is already made and stored in egIdRgdId map
-                if (egIdRgdId.get(idDest)==null) {
-                    // if the query is not made yet, make the query and store it in the map
-                    String rgdId=getRgdIdByEgId(idDest);
-                    egIdRgdId.put(idDest,rgdId);
-                    destRgdId=rgdId;
-                } else {
-                    // the query is already made, take it from the map
-                    destRgdId = egIdRgdId.get(idDest);
-                }
-
-                if (destRgdId.contains(multiple)) {
-                    multipleMatch.error("EGID:"+idDest+"\t"+destRgdId + "\t"+ orRel.getDestSpeciesTypeKey());
-                    multipleMatchC++;
-                    return;
-                } else if (destRgdId.contains(unmatched)) {
-                    loggerUnmatch.error("EGID:"+ idDest + "\t"+ orRel.getDestSpeciesTypeKey());
-                    unMatchedC++;
-                    return;
-                } else if (destRgdId.contains(withdrawn)) {
-                    loggerWithdrawn.error("EGID:"+ idDest +"\t"+destRgdId+"\t" +orRel.getDestSpeciesTypeKey());
-                    withdrawnC++;
-                    return;
-                }
-                orRel.setSrcRgdId(Integer.parseInt(srcRgdId));
-                orRel.setDestRgdId(Integer.parseInt(destRgdId));
-                loggerMatched.info("src EGID:"+idSrc+", src RGD:"+srcRgdId + ", dest EGID:"+idDest+", dest RGD:"+destRgdId +", src species:"+orRel.getSrcSpeciesTypeKey()+", dest species:"+orRel.getDestSpeciesTypeKey());
-                matchedC++;
+            if (srcRgdId.contains(multiple)) {
+                multipleMatch.error("EGID:"+idSrc+"\t"+srcRgdId+"\t"+orRel.getSrcSpeciesTypeKey());
+                counters.increment("multipleMatchC");
+                return;
             }
-        }, "QC", 8, 0);
+            else if (srcRgdId.contains(unmatched)) {
+                loggerUnmatch.error("EGID:"+ idSrc +"\t" +orRel.getSrcSpeciesTypeKey());
+                counters.increment("unMatchedC");
+                return;
+            }
+            else if (srcRgdId.contains(withdrawn)) {
+                loggerWithdrawn.error("EGID:"+ idSrc +"\t"+srcRgdId+"\t" +orRel.getSrcSpeciesTypeKey());
+                counters.increment("withdrawnC");
+                return;
+            }
+            //processing destination
+            // first check if the query is already made and stored in egIdRgdId map
+            if (egIdRgdId.get(idDest)==null) {
+                // if the query is not made yet, make the query and store it in the map
+                String rgdId=getRgdIdByEgId(idDest);
+                egIdRgdId.put(idDest,rgdId);
+                destRgdId=rgdId;
+            } else {
+                // the query is already made, take it from the map
+                destRgdId = egIdRgdId.get(idDest);
+            }
 
-        manager.run();
+            if (destRgdId.contains(multiple)) {
+                multipleMatch.error("EGID:"+idDest+"\t"+destRgdId + "\t"+ orRel.getDestSpeciesTypeKey());
+                counters.increment("multipleMatchC");
+                return;
+            } else if (destRgdId.contains(unmatched)) {
+                loggerUnmatch.error("EGID:"+ idDest + "\t"+ orRel.getDestSpeciesTypeKey());
+                counters.increment("unMatchedC");
+                return;
+            } else if (destRgdId.contains(withdrawn)) {
+                loggerWithdrawn.error("EGID:"+ idDest +"\t"+destRgdId+"\t" +orRel.getDestSpeciesTypeKey());
+                counters.increment("withdrawnC");
+                return;
+            }
+            orRel.setSrcRgdId(Integer.parseInt(srcRgdId));
+            orRel.setDestRgdId(Integer.parseInt(destRgdId));
+            loggerMatched.info("src EGID:"+idSrc+", src RGD:"+srcRgdId + ", dest EGID:"+idDest+", dest RGD:"+destRgdId +", src species:"+orRel.getSrcSpeciesTypeKey()+", dest species:"+orRel.getDestSpeciesTypeKey());
+            counters.increment("matchedC");
+        });
 
         process.info("  matched relations:       " + getMatchedC());
         process.info("  unmatched relations:     " + getUnMatchedC());
         process.info("  matched withdrawn genes: " + getWithdrawnC());
         process.info("  multiple match relations:" + getMultipleMatchC());
     }
-    
+
+    private String getRgdIdByEgId(String egId) {
+        try {
+            return getRgdIdByEgId2(egId);
+        } catch( Exception e ) {
+            throw new RuntimeException(e);
+        }
+    }
+
     /* In: an entrez gene id
      * Returns: 
      *   unmatched ----- the entrezgene id doesn't matches any genes in RGD (including active and non active genes)
@@ -310,7 +298,7 @@ public class OrthologRelationLoader {
      *   withdrawn ---- the entrezgene id matches non active gene which is not replaced by any active gene
      *   rgd id ----- the entrezgene id matches only one active gene or one nonactive gene which has been replaced by an active gene
      */
-    private String getRgdIdByEgId(String egId) throws Exception {
+    private String getRgdIdByEgId2(String egId) throws Exception {
         
         String rRgdId=""; // the returned rgd id
         String rgdIdInfo=""; // the associated rgd ids if there is multiple match
@@ -642,27 +630,27 @@ public class OrthologRelationLoader {
     
     
     public int getMatchedC() {
-        return matchedC;
+        return counters.get("matchedC");
     }
 
     public int getMultipleMatchC() {
-        return multipleMatchC;
+        return counters.get("multipleMatchC");
     }
 
     public int getUnMatchedC() {
-        return unMatchedC;
+        return counters.get("unMatchedC");
     }
 
     public int getWithdrawnC() {
-        return withdrawnC;
+        return counters.get("withdrawnC");
     }
     
     public int getRowsDeleted() {
-        return rowsDeleted;
+        return counters.get("rowsDeleted");
     }
 
     public int getRowsInserted() {
-        return rowsInserted;
+        return counters.get("rowsInserted");
     }
 
     public void setDefaultDataSetName(String defaultDataSetName) {
