@@ -554,10 +554,22 @@ public class OrthologRelationDao {
     }
     static Map<Integer, String> _geneSymbolCache = new HashMap<>(10003);
 
-    public Gene getGeneBySymbol(String geneSymbol, int speciesTypeKey) throws Exception {
+    public Gene getGeneBySymbol(String geneSymbol, int speciesTypeKey, Logger log) throws Exception {
         List<Gene> genes = geneDAO.getAllGenesBySymbol(geneSymbol, speciesTypeKey);
         if( genes.size()>1 ) {
-            throw new Exception("multiple genes for symbol "+geneSymbol+", species "+speciesTypeKey);
+            // remove inactive genes
+            Iterator<Gene> it = genes.iterator();
+            while( it.hasNext() ) {
+                Gene g = it.next();
+                RgdId id = getRgdId(g.getRgdId());
+                if( !id.getObjectStatus().equals("ACTIVE") ) {
+                    it.remove();
+                }
+            }
+        }
+        if( genes.size()>1 ) {
+            log.warn("multiple genes for symbol "+geneSymbol+", species "+speciesTypeKey);
+            return null;
         }
         return genes.isEmpty() ? null : genes.get(0);
     }
@@ -569,7 +581,22 @@ public class OrthologRelationDao {
             return null;
         }
 
-        RgdId id = rgdIdDAO.createRgdId(RgdId.OBJECT_KEY_GENES, "ACTIVE", "created by AGR Ortholog Loader", speciesTypeKey);
+        RgdId id;
+        if( true ) {
+            id = rgdIdDAO.createRgdId(RgdId.OBJECT_KEY_GENES, "ACTIVE", "created by AGR Ortholog Loader", speciesTypeKey);
+        } else {
+            //debug code
+            String sql = "select min(rgd_id)-1 as nextVal from rgd_ids";
+            int rgdId = rgdIdDAO.getCount(sql);
+            if( rgdId==0 ) {
+                rgdId = -1;
+            }
+
+            Integer speciesKey = speciesTypeKey == 0 ? null : speciesTypeKey;
+            String sql2 = "INSERT INTO rgd_ids (object_key, created_date, notes, last_modified_date, object_status, species_type_key, rgd_id) VALUES (?,SYSDATE,?,SYSDATE,?,?,?)";
+            rgdIdDAO.update(sql2, new Object[]{RgdId.OBJECT_KEY_GENES, "created by AGR Ortholog Loader", "ACTIVE", speciesKey, rgdId});
+            id = this.getRgdId(rgdId);
+        }
 
         Gene gene = new Gene();
         gene.setRgdId(id.getRgdId());

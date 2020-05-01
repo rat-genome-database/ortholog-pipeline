@@ -53,6 +53,7 @@ public class OrthologRelationLoadingManager {
         int speciesTypeKey = SpeciesType.ALL;
         boolean fixXrefDataSet = false;
         boolean agrOrthologs = false;
+        String format = null;
 
         for( int i=0; i<args.length; i++ ) {
             switch(args[i]) {
@@ -65,14 +66,25 @@ public class OrthologRelationLoadingManager {
                 case "--agrOrthologs":
                     agrOrthologs = true;
                     break;
+                case "--format=api":
+                    format = "api";
+                    break;
+                case "--format=tsv":
+                    format = "tsv";
+                    break;
             }
         }
 
         // run the instance
         try {
             if( agrOrthologs ) {
-                AgrLoader agrLoader = (AgrLoader) (bf.getBean("agrLoader"));
-                agrLoader.run();
+                if( Utils.stringsAreEqualIgnoreCase(format, "api") ) {
+                    AgrLoader agrLoader = (AgrLoader) (bf.getBean("agrLoader"));
+                    agrLoader.run();
+                } else {
+                    AgrTsvLoader agrLoader = (AgrTsvLoader) (bf.getBean("agrTsvLoader"));
+                    agrLoader.run();
+                }
                 return;
             }
 

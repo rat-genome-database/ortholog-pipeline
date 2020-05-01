@@ -40,19 +40,18 @@ public class AgrLoader {
 
     public void run() throws Exception {
 
-        try {
-            getProcessedSpecies().parallelStream().forEach(speciesName -> {
-                try {
-                    run(speciesName);
-                } catch (Exception e) {
-                    Utils.printStackTrace(e, log);
-                    throw new RuntimeException(e);
-                }
-            });
-        } catch(Exception e) {
-            Utils.printStackTrace(e, log);
-            throw e;
+        if( true ) {
+            throw new Exception("TODO: test throughly before running it again");
         }
+
+        getProcessedSpecies().stream().forEach(speciesName -> {
+            try {
+                run(speciesName);
+            } catch (Exception e) {
+                Utils.printStackTrace(e, log);
+                throw new RuntimeException(e);
+            }
+        });
     }
 
     void run( String speciesName ) throws Exception {
@@ -268,7 +267,7 @@ public class AgrLoader {
 
         // second, resolve by gene symbol
         if( gene==null ) {
-            gene = dao.getGeneBySymbol(geneSymbol, speciesTypeKey);
+            gene = dao.getGeneBySymbol(geneSymbol, speciesTypeKey, log);
         }
 
         // if gene still not found, insert it

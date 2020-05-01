@@ -59,6 +59,11 @@
 			</set>
 		</property>
 	</bean>
+
+	<bean id="agrTsvLoader" class="edu.mcw.rgd.dataload.AgrTsvLoader">
+		<property name="allianceFile" value="http://download.alliancegenome.org/3.0.0/ORTHOLOGY-ALLIANCE/COMBINED/ORTHOLOGY-ALLIANCE_COMBINED_123.tsv"/>
+		<property name="obsoleteOrthologsDeleteThreshold" value="10%"/>
+	</bean>
 </beans>
 
 
