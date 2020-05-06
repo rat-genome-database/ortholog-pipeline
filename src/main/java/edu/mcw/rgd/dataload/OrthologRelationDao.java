@@ -581,22 +581,7 @@ public class OrthologRelationDao {
             return null;
         }
 
-        RgdId id;
-        if( true ) {
-            id = rgdIdDAO.createRgdId(RgdId.OBJECT_KEY_GENES, "ACTIVE", "created by AGR Ortholog Loader", speciesTypeKey);
-        } else {
-            //debug code
-            String sql = "select min(rgd_id)-1 as nextVal from rgd_ids";
-            int rgdId = rgdIdDAO.getCount(sql);
-            if( rgdId==0 ) {
-                rgdId = -1;
-            }
-
-            Integer speciesKey = speciesTypeKey == 0 ? null : speciesTypeKey;
-            String sql2 = "INSERT INTO rgd_ids (object_key, created_date, notes, last_modified_date, object_status, species_type_key, rgd_id) VALUES (?,SYSDATE,?,SYSDATE,?,?,?)";
-            rgdIdDAO.update(sql2, new Object[]{RgdId.OBJECT_KEY_GENES, "created by AGR Ortholog Loader", "ACTIVE", speciesKey, rgdId});
-            id = this.getRgdId(rgdId);
-        }
+        RgdId id = rgdIdDAO.createRgdId(RgdId.OBJECT_KEY_GENES, "ACTIVE", "created by AGR Ortholog Loader", speciesTypeKey);
 
         Gene gene = new Gene();
         gene.setRgdId(id.getRgdId());
@@ -605,6 +590,9 @@ public class OrthologRelationDao {
         geneDAO.insertGene(gene);
 
         insertAgrGeneXdbId(id.getRgdId(), agrGeneId);
+
+        Logger log = Logger.getLogger("insertedAgrGenes");
+        log.debug("RGD:"+id.getRgdId()+" SYMBOL:"+geneSymbol+" AGR_CURIE:"+agrGeneId);
 
         return gene;
     }

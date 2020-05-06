@@ -2,6 +2,9 @@ TODO: generate rat_genes_without_orthologs file
 TODO: generate multi ortholog assignment for rat
 TODO: logRgd -- inacurate, must be species-specific
 
+May 06, 2020
+  agr tsv loader: login tune up, improved logging
+
 May 01, 2020
   agr loader: added tsv loader replacing api loader
 

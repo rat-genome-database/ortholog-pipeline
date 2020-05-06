@@ -14,6 +14,8 @@ import java.io.BufferedReader;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -50,26 +52,17 @@ public class AgrTsvLoader {
         //  we use the as the cutoff timestamp the machine timestamp minus one day
         Date time0 = Utils.addDaysToDate(new Date(), -1); // time0 = current day-and-time less 1 day
 
-        String localFile = downloadTsvFile();
-        BufferedReader in = Utils.openReader(localFile);
-        int dataLinesRead = 0;
         AtomicInteger inserted = new AtomicInteger(0);
         AtomicInteger updated = new AtomicInteger(0);
 
-        String line;
-        while( (line=in.readLine()) != null ) {
+        List<String> lines = loadLinesFromTsvFile();
+        Collections.shuffle(lines);
+        log.info("  LINES SHUFFLED");
 
-            // skip comment lines
-            if( line.startsWith("#") ) {
-                continue;
-            }
+        //int i = 0;
+        for( String line: lines ) {
 
-            // expected header line:
-            // Gene1ID	Gene1Symbol	Gene1SpeciesTaxonID	Gene1SpeciesName	Gene2ID	Gene2Symbol	Gene2SpeciesTaxonID	Gene2SpeciesName	Algorithms	AlgorithmsMatch	OutOfAlgorithms	IsBestScore	IsBestRevScore
-            if( dataLinesRead++ == 0 ) {
-                // skip header line
-                continue;
-            }
+            //log.debug((++i)+".");
 
             // data line, f.e.
             // HGNC:25018	TMEM216	NCBITaxon:9606	Homo sapiens	FB:FBgn0037615	CG11760	NCBITaxon:7227	Drosophila melanogaster	Ensembl Compara|InParanoid|Roundup|PhylomeDB|OMA|PANTHER|OrthoFinder|OrthoInspector|TreeFam|Hieranoid	10	10	Yes	Yes
@@ -116,12 +109,42 @@ public class AgrTsvLoader {
                 updated.incrementAndGet();
             }
         }
-        in.close();
 
         log.info("inserted orthologs: "+inserted);
         log.info("updated  orthologs: "+updated);
 
         wrapUp(time0);
+    }
+
+    List<String> loadLinesFromTsvFile() throws Exception {
+
+        String localFile = downloadTsvFile();
+        BufferedReader in = Utils.openReader(localFile);
+        int dataLinesRead = 0;
+        List<String> lines = new ArrayList<>();
+
+        String line;
+        while( (line=in.readLine()) != null ) {
+
+            // skip comment lines
+            if( line.startsWith("#") ) {
+                continue;
+            }
+
+            // expected header line:
+            // Gene1ID	Gene1Symbol	Gene1SpeciesTaxonID	Gene1SpeciesName	Gene2ID	Gene2Symbol	Gene2SpeciesTaxonID	Gene2SpeciesName	Algorithms	AlgorithmsMatch	OutOfAlgorithms	IsBestScore	IsBestRevScore
+            if( dataLinesRead++ == 0 ) {
+                // skip header line
+                continue;
+            }
+
+            lines.add(line);
+        }
+        in.close();
+
+        log.info("incoming data lines: "+dataLinesRead);
+
+        return lines;
     }
 
     String downloadTsvFile() throws Exception {
@@ -193,7 +216,8 @@ public class AgrTsvLoader {
         int xdbKey = 63; // AGR_GENE
         List<Gene> genes = dao.getGenesByXdbId(geneId, xdbKey);
         if( genes.size()>1 ) {
-            throw new Exception("multiple genes for "+geneId);
+            log.warn("  *** MULTIPLE GENES FOR "+geneId+"  RGD:"+Utils.concatenate(",RGD:", genes, "getRgdId")+";  picking the first one");
+            gene = genes.get(0);
         }
         if( !genes.isEmpty() ) {
             gene = genes.get(0);
