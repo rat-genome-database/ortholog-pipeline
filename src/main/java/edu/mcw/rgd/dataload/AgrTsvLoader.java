@@ -211,6 +211,8 @@ public class AgrTsvLoader {
             log.info("stale rows deleted from AGR_ORTHOLOGS: " + staleRowsDeleted);
         }
 
+        orthologCount = xdao.getCount(sql);
+        log.info("final ortholog count: "+orthologCount);
         log.info("===== OK =====   elapsed "+Utils.formatElapsedTime(time0.getTime(), System.currentTimeMillis()));
     }
 
