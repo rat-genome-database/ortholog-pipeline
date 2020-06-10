@@ -52,6 +52,10 @@ public class AgrTsvLoader {
         //  we use the as the cutoff timestamp the machine timestamp minus one day
         Date time0 = Utils.addDaysToDate(new Date(), -1); // time0 = current day-and-time less 1 day
 
+        String sql = "SELECT COUNT(0) FROM agr_orthologs";
+        int initialOrthologCount = xdao.getCount(sql);
+        log.info("initial ortholog count: "+initialOrthologCount);
+
         AtomicInteger inserted = new AtomicInteger(0);
         AtomicInteger updated = new AtomicInteger(0);
 
@@ -113,7 +117,7 @@ public class AgrTsvLoader {
         log.info("inserted orthologs: "+inserted);
         log.info("updated  orthologs: "+updated);
 
-        wrapUp(time0);
+        wrapUp(time0, initialOrthologCount);
     }
 
     List<String> loadLinesFromTsvFile() throws Exception {
@@ -158,13 +162,12 @@ public class AgrTsvLoader {
         return localFile;
     }
 
-    void wrapUp(Date time0) throws Exception {
+    void wrapUp(Date time0, int initialOrthologCount) throws Exception {
 
         // delete stale orthologs
         String sql = "SELECT COUNT(0) FROM agr_orthologs";
         int orthologCount = xdao.getCount(sql);
-        log.info("total ortholog count: "+orthologCount);
-
+        log.info("current ortholog count: "+orthologCount);
 
         sql = "SELECT * FROM agr_orthologs WHERE last_update_date<?";
         MappingSqlQuery q = new MappingSqlQuery(xdao.getDataSource(), sql) {
@@ -191,7 +194,7 @@ public class AgrTsvLoader {
         log.info(" stale ortholog count: "+staleOrthologs.size());
 
         // convert delete-threshold-in-percent to a number
-        int maxObsoleteOrthologsToBeDeleted = 0;
+        int maxObsoleteOrthologsToBeDeleted;
         if( obsoleteOrthologsDeleteThreshold.endsWith("%") ) {
             int threshold = Integer.parseInt(obsoleteOrthologsDeleteThreshold.substring(0, obsoleteOrthologsDeleteThreshold.length()-1));
             maxObsoleteOrthologsToBeDeleted = (threshold * orthologCount) / 100;
@@ -199,7 +202,8 @@ public class AgrTsvLoader {
             maxObsoleteOrthologsToBeDeleted = Integer.parseInt(obsoleteOrthologsDeleteThreshold);
         }
 
-        if( staleOrthologs.size() > maxObsoleteOrthologsToBeDeleted ) {
+        int newOrthologCount = orthologCount - staleOrthologs.size();
+        if( Math.abs(newOrthologCount-initialOrthologCount) > maxObsoleteOrthologsToBeDeleted ) {
             log.warn("*** WARN *** Cannot delete more than "+obsoleteOrthologsDeleteThreshold+" of stale orthologs!");
         } else {
             sql = "DELETE FROM agr_orthologs WHERE last_update_date<?";

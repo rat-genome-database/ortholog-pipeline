@@ -4,7 +4,8 @@ TODO: logRgd -- inacurate, must be species-specific
 
 Jun 10, 2020
   agr tsv loader: updated url to source file
-
+    improved handling of obsolete orthologs
+    
 May 06, 2020
   agr tsv loader: login tune up, improved logging
 
