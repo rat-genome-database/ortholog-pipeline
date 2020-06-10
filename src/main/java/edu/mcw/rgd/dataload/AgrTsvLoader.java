@@ -210,6 +210,8 @@ public class AgrTsvLoader {
             int staleRowsDeleted = xdao.update(sql, time0);
             log.info("stale rows deleted from AGR_ORTHOLOGS: " + staleRowsDeleted);
         }
+
+        log.info("===== OK =====   elapsed "+Utils.formatElapsedTime(time0.getTime(), System.currentTimeMillis()));
     }
 
     Gene resolveGene(int speciesTypeKey, String geneSymbol, String geneId) throws Exception {
