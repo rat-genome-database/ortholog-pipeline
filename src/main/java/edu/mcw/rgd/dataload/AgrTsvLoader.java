@@ -49,8 +49,8 @@ public class AgrTsvLoader {
 
         // note: there could be disparity between oracle server time and the time on machine the pipeline is running,
         //  so to prevent deletion of valid orthologs (classified by the code as 'stale orthologs'),
-        //  we use the as the cutoff timestamp the machine timestamp minus one day
-        Date time0 = Utils.addDaysToDate(new Date(), -1); // time0 = current day-and-time less 1 day
+        //  we use the as the cutoff timestamp the machine timestamp minus one hour
+        Date time0 = Utils.addHoursToDate(new Date(), -1); // time0 = current day-and-time less 1 hour
 
         String sql = "SELECT COUNT(0) FROM agr_orthologs";
         int initialOrthologCount = xdao.getCount(sql);
