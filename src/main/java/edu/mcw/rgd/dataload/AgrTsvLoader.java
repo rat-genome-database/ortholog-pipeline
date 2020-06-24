@@ -52,8 +52,7 @@ public class AgrTsvLoader {
         //  we use the as the cutoff timestamp the machine timestamp minus one hour
         Date time0 = Utils.addHoursToDate(new Date(), -1); // time0 = current day-and-time less 1 hour
 
-        String sql = "SELECT COUNT(0) FROM agr_orthologs";
-        int initialOrthologCount = xdao.getCount(sql);
+        int initialOrthologCount = getOrthologCount();
         log.info("initial ortholog count: "+initialOrthologCount);
 
         AtomicInteger inserted = new AtomicInteger(0);
@@ -165,11 +164,10 @@ public class AgrTsvLoader {
     void wrapUp(Date time0, int initialOrthologCount) throws Exception {
 
         // delete stale orthologs
-        String sql = "SELECT COUNT(0) FROM agr_orthologs";
-        int orthologCount = xdao.getCount(sql);
+        int orthologCount = getOrthologCount();
         log.info("current ortholog count: "+orthologCount);
 
-        sql = "SELECT * FROM agr_orthologs WHERE last_update_date<?";
+        String sql = "SELECT * FROM agr_orthologs WHERE last_update_date<?";
         MappingSqlQuery q = new MappingSqlQuery(xdao.getDataSource(), sql) {
             @Override
             protected Object mapRow(ResultSet rs, int rowNum) throws SQLException {
@@ -211,9 +209,14 @@ public class AgrTsvLoader {
             log.info("stale rows deleted from AGR_ORTHOLOGS: " + staleRowsDeleted);
         }
 
-        orthologCount = xdao.getCount(sql);
+        orthologCount = getOrthologCount();
         log.info("final ortholog count: "+orthologCount);
         log.info("===== OK =====   elapsed "+Utils.formatElapsedTime(time0.getTime(), System.currentTimeMillis()));
+    }
+
+    int getOrthologCount() throws Exception {
+        String sql = "SELECT COUNT(0) FROM agr_orthologs";
+        return xdao.getCount(sql);
     }
 
     Gene resolveGene(int speciesTypeKey, String geneSymbol, String geneId) throws Exception {
