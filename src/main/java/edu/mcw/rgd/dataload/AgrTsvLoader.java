@@ -14,10 +14,7 @@ import java.io.BufferedReader;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Date;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -80,7 +77,7 @@ public class AgrTsvLoader {
             String taxonId2 = cols[6]; // f.e. "NCBITaxon:9606"
             String taxonName2 = cols[7]; // f.e. "Homo sapiens"
 
-            String algorithms = cols[8];
+            String algorithms = sortAlgorithmsStr(cols[8]);
             String algorithmsMatch = cols[9]; // f.e. "6"
             String outOfAlgorithms = cols[10]; // f.e. "9"
             String isBestScoreStr = cols[11]; // True of False
@@ -117,6 +114,13 @@ public class AgrTsvLoader {
         log.info("updated  orthologs: "+updated);
 
         wrapUp(time0, initialOrthologCount);
+    }
+
+    /// sort '|'-separated algorithm string, to present the data in nice way
+    String sortAlgorithmsStr(String s) {
+        String[] arr = s.split("\\|");
+        Set<String> sorted = new TreeSet<>(Arrays.asList(arr));
+        return Utils.concatenate(sorted, "|");
     }
 
     List<String> loadLinesFromTsvFile() throws Exception {
