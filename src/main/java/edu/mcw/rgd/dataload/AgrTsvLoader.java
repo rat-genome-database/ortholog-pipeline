@@ -206,7 +206,7 @@ public class AgrTsvLoader {
 
         int newOrthologCount = orthologCount - staleOrthologs.size();
         if( Math.abs(newOrthologCount-initialOrthologCount) > maxObsoleteOrthologsToBeDeleted ) {
-            log.warn("*** WARN *** Cannot delete more than "+obsoleteOrthologsDeleteThreshold+" of stale orthologs!");
+            log.warn("*** WARN *** Cannot delete more than "+obsoleteOrthologsDeleteThreshold+" ("+maxObsoleteOrthologsToBeDeleted+") of orthologs!");
         } else {
             sql = "DELETE FROM agr_orthologs WHERE last_update_date<?";
             int staleRowsDeleted = xdao.update(sql, time0);
