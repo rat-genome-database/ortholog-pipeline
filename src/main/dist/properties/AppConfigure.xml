@@ -1,7 +1,7 @@
 <!DOCTYPE beans PUBLIC "-//SPRING//DTD BEAN//EN" "http://www.springframework.org/dtd/spring-beans.dtd">
 <beans>
 	<bean id="orthologRelationLoadingManager" class="edu.mcw.rgd.dataload.OrthologRelationLoadingManager">
-        <property name="version" value="Ortholog Relation Loader   -- build Sep 02, 2020"/>
+        <property name="version" value="Ortholog Relation Loader   -- build Apr 28, 2021"/>
 		<property name="orthologRelationParser" ref="orthologRelationParser"/>
 		<property name="orthologRelationLoader" ref="orthologRelationLoader"/>
 		<property name="rgdLogger" ref="rgdLogger"/>
@@ -61,7 +61,7 @@
 	</bean>
 
 	<bean id="agrTsvLoader" class="edu.mcw.rgd.dataload.AgrTsvLoader">
-		<property name="allianceFile" value="http://download.alliancegenome.org/3.2.0/ORTHOLOGY-ALLIANCE/COMBINED/ORTHOLOGY-ALLIANCE_COMBINED_13.tsv"/>
+		<property name="allianceFile" value="https://fms.alliancegenome.org/download/ORTHOLOGY-ALLIANCE_COMBINED.tsv.gz"/>
 		<property name="obsoleteOrthologsDeleteThreshold" value="10%"/>
 	</bean>
 </beans>
