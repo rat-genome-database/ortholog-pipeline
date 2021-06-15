@@ -5,9 +5,9 @@
 #
 SERVER=`hostname -s | tr '[a-z]' '[A-Z]'`
 HOMEDIR=/home/rgddata/pipelines/OrthologRelationLoading
-EMAIL=mtutaj@mcw.edu,cdursun@mcw.edu
+EMAIL=mtutaj@mcw.edu
 if [ "$SERVER" = "REED" ]; then
-  EMAIL_LIST=mtutaj@mcw.edu,cdursun@mcw.edu,slaulederkind@mcw.edu
+  EMAIL_LIST=mtutaj@mcw.edu,slaulederkind@mcw.edu
 fi
 
 ${HOMEDIR}/run.sh --species $1 > ${HOMEDIR}/$1.log
