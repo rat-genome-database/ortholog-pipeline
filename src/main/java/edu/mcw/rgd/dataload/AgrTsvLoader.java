@@ -2,6 +2,7 @@ package edu.mcw.rgd.dataload;
 
 import edu.mcw.rgd.dao.impl.XdbIdDAO;
 import edu.mcw.rgd.datamodel.Gene;
+import edu.mcw.rgd.datamodel.RgdId;
 import edu.mcw.rgd.datamodel.SpeciesType;
 import edu.mcw.rgd.datamodel.XdbId;
 import edu.mcw.rgd.process.FileDownloader;
@@ -59,6 +60,8 @@ public class AgrTsvLoader {
         Collections.shuffle(lines);
         log.info("  LINES SHUFFLED");
 
+        Set<Integer> accXdbKeys = new HashSet<>();
+
         //int i = 0;
         for( String line: lines ) {
 
@@ -89,6 +92,7 @@ public class AgrTsvLoader {
                 log.warn("WARN: cannot resolve gene ["+geneSymbol1+"] ["+curie1+"] "+taxonName1);
                 continue;
             }
+            resolveCurie(accXdbKeys, curie1, g1.getRgdId());
 
             int speciesTypeKey2 = SpeciesType.parse(taxonName2);
             Gene g2 = resolveGene(speciesTypeKey2, geneSymbol2, curie2);
@@ -96,6 +100,7 @@ public class AgrTsvLoader {
                 log.warn("WARN: cannot resolve gene ["+geneSymbol2+"] ["+curie2+"] "+taxonName2);
                 continue;
             }
+            resolveCurie(accXdbKeys, curie2, g2.getRgdId());
 
             boolean isBestScore = isBestScoreStr.equals("Yes");
             boolean isBestRevScore = isBestRevScoreStr.equals("Yes");
@@ -113,7 +118,21 @@ public class AgrTsvLoader {
         log.info("inserted orthologs: "+inserted);
         log.info("updated  orthologs: "+updated);
 
-        wrapUp(time0, initialOrthologCount);
+        wrapUp(time0, initialOrthologCount, accXdbKeys);
+    }
+
+    void resolveCurie(Set<Integer> xdbIdKeys, String curie, int rgdId) throws Exception {
+
+        int xdbKey = 63; // AGR_GENE
+        List<XdbId> xdbIds = dao.getXdbIdsByRgdId(xdbKey, rgdId);
+        for( XdbId xdbId: xdbIds ) {
+            if( xdbId.getAccId().equals(curie) ) {
+                xdbIdKeys.add(xdbId.getKey());
+                return;
+            }
+        }
+
+        //throw new Exception("resolveCurie for XDB_KEY=63 failed: "+curie+", RGD:"+rgdId);
     }
 
     /// sort '|'-separated algorithm string, to present the data in nice way
@@ -165,7 +184,7 @@ public class AgrTsvLoader {
         return localFile;
     }
 
-    void wrapUp(Date time0, int initialOrthologCount) throws Exception {
+    void wrapUp(Date time0, int initialOrthologCount, Set<Integer> curieAccXdbKeys) throws Exception {
 
         // delete stale orthologs
         int orthologCount = getOrthologCount();
@@ -215,6 +234,10 @@ public class AgrTsvLoader {
 
         orthologCount = getOrthologCount();
         log.info("final ortholog count: "+orthologCount);
+
+        // QC AGR_GENE  curies
+        dao.qcCuries(time0, curieAccXdbKeys, log);
+
         log.info("===== OK =====   elapsed "+Utils.formatElapsedTime(time0.getTime(), System.currentTimeMillis()));
     }
 

@@ -33,6 +33,9 @@ public class OrthologRelationDao {
     private int directOrthologTypeKey;
     private int transitiveOrthologTypeKey;
 
+    static public final String SRC_PIPELINE = "AgrOrtholog";
+    static public final int XDB_KEY_AGR_GENE = 63;
+
     public OrthologRelationDao() {
         logger.info(orthologDAO.getConnectionInfo());
     }
@@ -601,9 +604,28 @@ public class OrthologRelationDao {
         XdbId xdbId = new XdbId();
         xdbId.setRgdId(geneRgdId);
         xdbId.setAccId(accId);
-        xdbId.setXdbKey(63);
-        xdbId.setSrcPipeline("AgrOrtholog");
+        xdbId.setXdbKey(XDB_KEY_AGR_GENE);
+        xdbId.setSrcPipeline(SRC_PIPELINE);
+        xdbId.setModificationDate(new Date());
         xdbIdDAO.insertXdb(xdbId);
+    }
+
+    public List<XdbId> getXdbIdsByRgdId(int xdbKey, int rgdId) throws Exception {
+        return xdbIdDAO.getXdbIdsByRgdId(xdbKey, rgdId);
+    }
+
+    public void qcCuries(Date cutoffDate, Collection<Integer> accXdbKeys, Logger log) throws Exception {
+
+        log.info("QC AGR_GENE curies ...");
+
+        // set last modified date to SYSDATE for all AGR_GENE curies that has been processed by the pipeline
+        xdbIdDAO.updateModificationDate(new ArrayList<>(accXdbKeys));
+
+        List<XdbId> staleCuries = xdbIdDAO.getXdbIdsModifiedBefore(XDB_KEY_AGR_GENE, SRC_PIPELINE, cutoffDate);
+        log.info("    stale curies: "+staleCuries.size());
+
+        xdbIdDAO.deleteXdbIds(staleCuries);
+        log.info("    stale curies deleted!");
     }
 
     public List<String> getCrossLinkedOrthologs(int speciesTypeKey) throws Exception {
