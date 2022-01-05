@@ -8,7 +8,8 @@ import edu.mcw.rgd.datamodel.Ortholog;
 import edu.mcw.rgd.datamodel.SpeciesType;
 import edu.mcw.rgd.process.CounterPool;
 import edu.mcw.rgd.process.Utils;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 /*
  * Created on Mar 23, 2007
@@ -24,12 +25,12 @@ public class OrthologRelationLoader {
     final String withdrawn="withdrawn";
     CounterPool counters;
 
-    protected final Logger loggerMatched = Logger.getLogger("Matched");
-    protected final Logger loggerUnmatch = Logger.getLogger("Unmatched");
-    protected final Logger multipleMatch = Logger.getLogger("MultipleMatch");
-    protected final Logger loggerWithdrawn = Logger.getLogger("Withdrawn");
-    protected final Logger process = Logger.getLogger("process");
-    protected final Logger assoc = Logger.getLogger("Assoc");
+    protected final Logger loggerMatched = LogManager.getLogger("matched");
+    protected final Logger loggerUnmatch = LogManager.getLogger("unmatched");
+    protected final Logger multipleMatch = LogManager.getLogger("multipleMatch");
+    protected final Logger loggerWithdrawn = LogManager.getLogger("withdrawn");
+    protected final Logger process = LogManager.getLogger("process");
+    protected final Logger assoc = LogManager.getLogger("assoc");
     private String defaultDataSetName;
     private int createdBy; // curation user id for the pipeline
 
@@ -150,7 +151,7 @@ public class OrthologRelationLoader {
 
         // run qc - delete stale objects afterwards (in-rgd associations that have not been processed by qc process)
         boolean deleteStaleObjects = true;
-        syncer.qc("Assoc", deleteStaleObjects);
+        syncer.qc("assoc", deleteStaleObjects);
 
         // insert map data
         List<Association> objs = syncer.getObjectsForInsert();

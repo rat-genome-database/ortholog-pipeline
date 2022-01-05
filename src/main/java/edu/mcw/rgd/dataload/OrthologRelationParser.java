@@ -6,7 +6,8 @@ import java.util.zip.GZIPInputStream;
 
 import edu.mcw.rgd.datamodel.SpeciesType;
 import edu.mcw.rgd.process.Utils;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 /*
  * Parse the homolog relationship data from file (human-mouse and human-rat relations)
@@ -25,7 +26,7 @@ public class OrthologRelationParser {
     int totalRelations=0;
     int skippedRelations=0;
     
-    protected final Logger processLog = Logger.getLogger("process");
+    protected final Logger processLog = LogManager.getLogger("process");
     private OrthologRelationFile file;
 
     public List<OrthologRelation> parse(int speciesTypeKey) throws Exception {

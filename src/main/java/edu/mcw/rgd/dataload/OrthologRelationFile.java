@@ -2,7 +2,8 @@ package edu.mcw.rgd.dataload;
 
 import edu.mcw.rgd.datamodel.SpeciesType;
 import edu.mcw.rgd.process.FileDownloader;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Set;
 
@@ -12,7 +13,7 @@ import java.util.Set;
  */
 public class OrthologRelationFile extends FileDownloader {
 
-    protected final Logger processLog = Logger.getLogger("process");
+    protected final Logger processLog = LogManager.getLogger("process");
 
     private boolean isFileFromHCOP;
     private String localFileName;

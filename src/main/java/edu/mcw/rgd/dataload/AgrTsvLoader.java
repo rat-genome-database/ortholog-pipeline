@@ -2,12 +2,12 @@ package edu.mcw.rgd.dataload;
 
 import edu.mcw.rgd.dao.impl.XdbIdDAO;
 import edu.mcw.rgd.datamodel.Gene;
-import edu.mcw.rgd.datamodel.RgdId;
 import edu.mcw.rgd.datamodel.SpeciesType;
 import edu.mcw.rgd.datamodel.XdbId;
 import edu.mcw.rgd.process.FileDownloader;
 import edu.mcw.rgd.process.Utils;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.springframework.jdbc.core.SqlParameter;
 import org.springframework.jdbc.object.MappingSqlQuery;
 
@@ -26,9 +26,9 @@ public class AgrTsvLoader {
     XdbIdDAO xdao = new XdbIdDAO();
     OrthologRelationDao dao = new OrthologRelationDao();
 
-    Logger log = Logger.getLogger("agrStatus");
-    Logger logDel = Logger.getLogger("deletedAgrOrthologs");
-    Logger logIns = Logger.getLogger("insertedAgrOrthologs");
+    Logger log = LogManager.getLogger("agrStatus");
+    Logger logDel = LogManager.getLogger("deletedAgrOrthologs");
+    Logger logIns = LogManager.getLogger("insertedAgrOrthologs");
 
     private String allianceFile;
     private String obsoleteOrthologsDeleteThreshold;

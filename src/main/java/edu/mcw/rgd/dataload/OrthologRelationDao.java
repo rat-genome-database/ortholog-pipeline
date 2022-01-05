@@ -9,7 +9,8 @@ import java.util.Map;
 import edu.mcw.rgd.dao.impl.*;
 import edu.mcw.rgd.datamodel.*;
 import edu.mcw.rgd.process.Utils;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 
@@ -20,9 +21,9 @@ import javax.sql.DataSource;
  */
 public class OrthologRelationDao {
 
-    protected final Logger logger = Logger.getLogger("process");
-    protected final Logger logInsertedOrthologs = Logger.getLogger("InsertedOrthologs");
-    public final Logger logDeletedOrthologs = Logger.getLogger("DeletedOrthologs");
+    protected final Logger logger = LogManager.getLogger("process");
+    protected final Logger logInsertedOrthologs = LogManager.getLogger("inserted_orthologs");
+    public final Logger logDeletedOrthologs = LogManager.getLogger("deleted_orthologs");
 
     private OrthologDAO orthologDAO = new OrthologDAO();
     private RGDManagementDAO rgdIdDAO = new RGDManagementDAO();
@@ -594,7 +595,7 @@ public class OrthologRelationDao {
 
         insertAgrGeneXdbId(id.getRgdId(), agrGeneId);
 
-        Logger log = Logger.getLogger("insertedAgrGenes");
+        Logger log = LogManager.getLogger("insertedAgrGenes");
         log.debug("RGD:"+id.getRgdId()+" SYMBOL:"+geneSymbol+" AGR_CURIE:"+agrGeneId);
 
         return gene;

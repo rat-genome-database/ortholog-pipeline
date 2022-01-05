@@ -3,7 +3,8 @@ package edu.mcw.rgd.dataload;
 import edu.mcw.rgd.datamodel.Gene;
 import edu.mcw.rgd.datamodel.SpeciesType;
 import edu.mcw.rgd.process.Utils;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.support.DefaultListableBeanFactory;
 import org.springframework.beans.factory.xml.XmlBeanDefinitionReader;
 import org.springframework.core.io.FileSystemResource;
@@ -31,10 +32,10 @@ public class OrthologRelationLoadingManager {
     int countOfRatGenesWithoutOrthologs = 0;
     RGDSpringLogger rgdLogger;
 
-    protected final Logger status = Logger.getLogger("status");
-    protected final Logger process = Logger.getLogger("process");
-    protected final Logger logNoOrthologs = Logger.getLogger("NoOrthologs");
-    protected final Logger logCrossLinked = Logger.getLogger("CrossLinkedOrthologs");
+    protected final Logger status = LogManager.getLogger("status");
+    protected final Logger process = LogManager.getLogger("process");
+    protected final Logger logNoOrthologs = LogManager.getLogger("noOrthologs");
+    protected final Logger logCrossLinked = LogManager.getLogger("crossLinkedOrthologs");
 
     static private OrthologRelationLoadingManager _instance;
     private String version;
@@ -101,8 +102,7 @@ public class OrthologRelationLoadingManager {
             }
         }
         catch( Exception e ) {
-            _instance.process.error("CRITICAL ERROR", e);
-            e.printStackTrace();
+            Utils.printStackTrace(e, _instance.process);
             throw e;
         }
     }

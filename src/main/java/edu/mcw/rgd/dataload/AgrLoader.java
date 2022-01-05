@@ -6,7 +6,8 @@ import edu.mcw.rgd.datamodel.SpeciesType;
 import edu.mcw.rgd.datamodel.XdbId;
 import edu.mcw.rgd.process.FileDownloader;
 import edu.mcw.rgd.process.Utils;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
@@ -31,9 +32,9 @@ public class AgrLoader {
     XdbIdDAO xdao = new XdbIdDAO();
     OrthologRelationDao dao = new OrthologRelationDao();
 
-    Logger log = Logger.getLogger("agrStatus");
-    Logger logDel = Logger.getLogger("deletedAgrOrthologs");
-    Logger logIns = Logger.getLogger("insertedAgrOrthologs");
+    Logger log = LogManager.getLogger("agrStatus");
+    Logger logDel = LogManager.getLogger("deletedAgrOrthologs");
+    Logger logIns = LogManager.getLogger("insertedAgrOrthologs");
 
     private Set<String> processedSpecies;
     private String allianceFile;
