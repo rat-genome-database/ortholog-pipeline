@@ -7,6 +7,7 @@ import java.util.*;
 import java.util.Map;
 
 import edu.mcw.rgd.dao.impl.*;
+import edu.mcw.rgd.dao.spring.IntListQuery;
 import edu.mcw.rgd.datamodel.*;
 import edu.mcw.rgd.process.Utils;
 import org.apache.logging.log4j.LogManager;
@@ -498,10 +499,9 @@ public class OrthologRelationDao {
     }
 
     public List<Integer> getRgdIdListByEGID(String egId) throws Exception {
-        JdbcTemplate jt = new JdbcTemplate(this.getDataSource());
-        return jt.queryForList("select distinct x.RGD_ID from RGD_ACC_XDB x,GENES g where xdb_key=3 and ACC_ID=? "
-                +"and x.RGD_ID=g.RGD_ID and g.GENE_TYPE_LC NOT IN('allele','splice')",
-                new Object[]{egId}, new int[]{Types.VARCHAR}, Integer.class);
+        String sql = "SELECT DISTINCT x.rgd_id FROM rgd_acc_xdb x,genes g WHERE xdb_key=3 AND acc_id=? "
+                +"AND x.rgd_id=g.rgd_id AND g.gene_type_lc NOT IN('allele','splice')",
+        return IntListQuery.execute(geneDAO, sql, egId);
     }
 
     public List<Gene> getGenesByXdbId(String geneId, int xdbKey) throws Exception {
