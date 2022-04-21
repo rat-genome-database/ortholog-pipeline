@@ -500,7 +500,7 @@ public class OrthologRelationDao {
 
     public List<Integer> getRgdIdListByEGID(String egId) throws Exception {
         String sql = "SELECT DISTINCT x.rgd_id FROM rgd_acc_xdb x,genes g WHERE xdb_key=3 AND acc_id=? "
-                +"AND x.rgd_id=g.rgd_id AND g.gene_type_lc NOT IN('allele','splice')",
+                +"AND x.rgd_id=g.rgd_id AND g.gene_type_lc NOT IN('allele','splice')";
         return IntListQuery.execute(geneDAO, sql, egId);
     }
 
