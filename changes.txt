@@ -2,6 +2,9 @@ TODO: generate rat_genes_without_orthologs file
 TODO: generate multi ortholog assignment for rat
 TODO: logRgd -- inacurate, must be species-specific
 
+Jun 21, 2022
+  fixed logging of date stamps
+
 Apr 21, 2022
   simplified sql code
 
