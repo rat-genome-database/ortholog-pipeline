@@ -1,19 +1,15 @@
 package edu.mcw.rgd.dataload;
 
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Types;
 import java.util.*;
 import java.util.Map;
 
 import edu.mcw.rgd.dao.impl.*;
 import edu.mcw.rgd.dao.spring.IntListQuery;
+import edu.mcw.rgd.dao.spring.StringListQuery;
 import edu.mcw.rgd.datamodel.*;
 import edu.mcw.rgd.process.Utils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.RowMapper;
 
 import javax.sql.DataSource;
 
@@ -630,8 +626,8 @@ public class OrthologRelationDao {
     }
 
     public List<String> getCrossLinkedOrthologs(int speciesTypeKey) throws Exception {
-        JdbcTemplate jt=new JdbcTemplate(this.getDataSource());
-        return jt.query("SELECT g.rgd_id,g.gene_symbol FROM genes g WHERE g.rgd_id IN(\n" +
+
+        String sql = "SELECT g.rgd_id,g.gene_symbol FROM genes g WHERE g.rgd_id IN(\n" +
                 "SELECT dest_rgd_id FROM GENETOGENE_RGD_ID_RLT,rgd_ids r1,rgd_ids r2\n" +
                 "WHERE dest_rgd_id=r1.rgd_id AND r1.object_status='ACTIVE' AND r1.species_type_key=?\n" +
                 "  AND src_rgd_id=r2.rgd_id AND r2.object_status='ACTIVE' AND r2.species_type_key IN(1,2,3)\n" +
@@ -641,13 +637,9 @@ public class OrthologRelationDao {
                 "WHERE src_rgd_id=r1.rgd_id AND r1.object_status='ACTIVE' AND r1.species_type_key=?\n" +
                 "  AND dest_rgd_id=r2.rgd_id AND r2.object_status='ACTIVE' AND r2.species_type_key IN(1,2,3)\n" +
                 "GROUP BY src_rgd_id HAVING COUNT(*)>2\n" +
-                ") ORDER BY LOWER(gene_symbol)",
-                new Object[]{speciesTypeKey, speciesTypeKey},
-                new RowMapper(){
-                    public Object mapRow(ResultSet resultSet, int i) throws SQLException {
-                        return resultSet.getInt(1)+"\t"+resultSet.getString(2);
-                    }
-                });
+                ") ORDER BY LOWER(gene_symbol)";
+
+        return StringListQuery.execute(geneDAO, sql, speciesTypeKey, speciesTypeKey);
     }
 
     /**
