@@ -9,6 +9,7 @@ EMAIL=mtutaj@mcw.edu
 if [ "$SERVER" = "REED" ]; then
   EMAIL_LIST=mtutaj@mcw.edu,slaulederkind@mcw.edu
 fi
+SKIP_EMAIL_SUMMARY=0
 
 ${HOMEDIR}/run.sh --species $1 > ${HOMEDIR}/$1.log
 if [ $SKIP_EMAIL_SUMMARY -ne 1 ]; then

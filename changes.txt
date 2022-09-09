@@ -2,6 +2,9 @@ TODO: generate rat_genes_without_orthologs file
 TODO: generate multi ortholog assignment for rat
 TODO: logRgd -- inacurate, must be species-specific
 
+Sep 09, 2022
+  fixed loadSpecies.sh
+
 Sep 08, 2022
   simplified dao code
 

@@ -67,10 +67,10 @@ public class OrthologRelationLoadingManager {
                 case "--agrOrthologs":
                     agrOrthologs = true;
                     break;
-                case "--format=api":
+                case "--format=api": // parameter for agrOrthologs
                     format = "api";
                     break;
-                case "--format=tsv":
+                case "--format=tsv": // parameter for agrOrthologs
                     format = "tsv";
                     break;
             }

@@ -61,7 +61,7 @@ public class OrthologRelationLoader {
 
         Collection<OrthologGroup> groups = buildGroups(orthologRelations);
 
-        qcGroups(groups, speciesTypeKey);
+        qcGroups(groups);
 
         List<Ortholog> weakOrthologs = loadGroups(groups, speciesTypeKey);
 
@@ -73,7 +73,7 @@ public class OrthologRelationLoader {
     }
 
     // drop relations that could not be mapped to RGD
-    void dropUnmappedRelations() throws Exception {
+    void dropUnmappedRelations() {
 
         int countOriginal = orthologRelations.size();
         Iterator<OrthologRelation> it = orthologRelations.iterator();
@@ -106,7 +106,7 @@ public class OrthologRelationLoader {
         process.info("  INCOMING ASSOCIATIONS + WEAK ORTHOLOGS: " + associations.size());
     }
 
-    List<Association> buildAssociationsFromRelations(Collection<OrthologGroup> groups) throws Exception {
+    List<Association> buildAssociationsFromRelations(Collection<OrthologGroup> groups) {
 
         List<Association> associations = new ArrayList<>(orthologRelations.size());
 
@@ -199,7 +199,7 @@ public class OrthologRelationLoader {
     /*
      * map the entrezgene id in the ortholog relationship data to RGD ID
      */
-    public void matchRgdId() throws Exception {
+    public void matchRgdId() {
 
         process.info("Match relations against RGD:");
 
@@ -393,7 +393,7 @@ public class OrthologRelationLoader {
     // 1. separate group relations by species
     // 2. for every species subgroup, choose an ortholog
     // 3. remaining entries for species subgroup will become associations
-    void qcGroups( Collection<OrthologGroup> groups, int speciesTypeKey ) throws Exception {
+    void qcGroups( Collection<OrthologGroup> groups ) throws Exception {
 
         int[] methodCounters = new int[4];
         for( OrthologGroup group: groups ) {
@@ -472,7 +472,7 @@ public class OrthologRelationLoader {
     }
 
     // methodCounters - array of how many times given best-fit method was used
-    public static OrthologRelation pickBestFitRelation(List<OrthologRelation> relations, int[] methodCounters, final OrthologRelationDao dao) throws Exception {
+    public static OrthologRelation pickBestFitRelation(List<OrthologRelation> relations, int[] methodCounters, final OrthologRelationDao dao) {
 
         int sourceRgdId = relations.get(0).getSrcRgdId();
 
