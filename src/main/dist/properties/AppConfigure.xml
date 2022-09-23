@@ -1,7 +1,7 @@
 <!DOCTYPE beans PUBLIC "-//SPRING//DTD BEAN//EN" "http://www.springframework.org/dtd/spring-beans.dtd">
 <beans>
 	<bean id="orthologRelationLoadingManager" class="edu.mcw.rgd.dataload.OrthologRelationLoadingManager">
-        <property name="version" value="Ortholog Relation Loader   -- build Sep 09, 2022"/>
+        <property name="version" value="Ortholog Relation Loader   -- build Sep 23, 2022"/>
 		<property name="orthologRelationParser" ref="orthologRelationParser"/>
 		<property name="orthologRelationLoader" ref="orthologRelationLoader"/>
 		<property name="rgdLogger" ref="rgdLogger"/>
