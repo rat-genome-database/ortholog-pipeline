@@ -63,6 +63,17 @@
 	<bean id="agrTsvLoader" class="edu.mcw.rgd.dataload.AgrTsvLoader">
 		<property name="allianceFile" value="https://fms.alliancegenome.org/download/ORTHOLOGY-ALLIANCE_COMBINED.tsv.gz"/>
 		<property name="obsoleteOrthologsDeleteThreshold" value="10%"/>
+		<property name="processedSpecies">
+			<set>
+				<value>rat</value>
+				<value>human</value>
+				<value>mouse</value>
+				<value>zebrafish</value>
+				<value>fly</value>
+				<value>roundworm</value>
+				<value>yeast</value>
+			</set>
+		</property>
 	</bean>
 </beans>
 

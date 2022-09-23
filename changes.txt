@@ -4,6 +4,7 @@ TODO: logRgd -- inacurate, must be species-specific
 
 Sep 23, 2022
   tweaked up the scripts to avoid generation of huge summary emails
+  agr tsv loader: only species explicitly specified are processed
 
 Sep 09, 2022
   fixed loadSpecies.sh

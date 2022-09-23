@@ -32,6 +32,7 @@ public class AgrTsvLoader {
 
     private String allianceFile;
     private String obsoleteOrthologsDeleteThreshold;
+    private Set<String> processedSpecies;
 
     public void run() throws Exception {
 
@@ -50,11 +51,20 @@ public class AgrTsvLoader {
         //  we use the as the cutoff timestamp the machine timestamp minus one hour
         Date time0 = Utils.addHoursToDate(new Date(), -1); // time0 = current day-and-time less 1 hour
 
+        Set<Integer> processedSpeciesTypeKeys = new HashSet<>();
+        for( String processedSpeciesName: getProcessedSpecies() ) {
+            int sp = SpeciesType.parse(processedSpeciesName);
+            if( sp>0 ) {
+                processedSpeciesTypeKeys.add(sp);
+            }
+        }
+
         int initialOrthologCount = getOrthologCount();
         log.info("initial ortholog count: "+initialOrthologCount);
 
         AtomicInteger inserted = new AtomicInteger(0);
         AtomicInteger updated = new AtomicInteger(0);
+        AtomicInteger skipped = new AtomicInteger(0);
 
         List<String> lines = loadLinesFromTsvFile();
         Collections.shuffle(lines);
@@ -87,6 +97,15 @@ public class AgrTsvLoader {
             String isBestRevScoreStr = cols[12]; // True or False
 
             int speciesTypeKey1 = SpeciesType.parse(taxonName1);
+            int speciesTypeKey2 = SpeciesType.parse(taxonName2);
+
+            if( !processedSpeciesTypeKeys.contains(speciesTypeKey1) ||
+                !processedSpeciesTypeKeys.contains(speciesTypeKey2) ) {
+
+                skipped.incrementAndGet();
+                continue;
+            }
+
             Gene g1 = resolveGene(speciesTypeKey1, geneSymbol1, curie1);
             if( g1==null ) {
                 log.warn("WARN: cannot resolve gene ["+geneSymbol1+"] ["+curie1+"] "+taxonName1);
@@ -94,7 +113,6 @@ public class AgrTsvLoader {
             }
             resolveCurie(accXdbKeys, curie1, g1.getRgdId());
 
-            int speciesTypeKey2 = SpeciesType.parse(taxonName2);
             Gene g2 = resolveGene(speciesTypeKey2, geneSymbol2, curie2);
             if( g2==null ) {
                 log.warn("WARN: cannot resolve gene ["+geneSymbol2+"] ["+curie2+"] "+taxonName2);
@@ -117,6 +135,7 @@ public class AgrTsvLoader {
 
         log.info("inserted orthologs: "+inserted);
         log.info("updated  orthologs: "+updated);
+        log.info("skipped  orthologs: "+skipped+" (species skipped from processing)");
 
         wrapUp(time0, initialOrthologCount, accXdbKeys);
     }
@@ -343,5 +362,13 @@ public class AgrTsvLoader {
 
     public void setObsoleteOrthologsDeleteThreshold(String obsoleteOrthologsDeleteThreshold) {
         this.obsoleteOrthologsDeleteThreshold = obsoleteOrthologsDeleteThreshold.trim();
+    }
+
+    public void setProcessedSpecies(Set<String> processedSpecies) {
+        this.processedSpecies = processedSpecies;
+    }
+
+    public Set<String> getProcessedSpecies() {
+        return processedSpecies;
     }
 }
