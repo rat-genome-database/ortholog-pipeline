@@ -465,13 +465,7 @@ public class OrthologRelationDao {
     public int deleteOrthologs(List<Ortholog> orthologs) throws Exception {
 
         // never delete custom RGD ortholog
-        Iterator<Ortholog> it = orthologs.iterator();
-        while( it.hasNext() ) {
-            Ortholog o = it.next();
-            if( Utils.stringsAreEqual(o.getXrefDataSrc(), "RGD") ) {
-                it.remove();
-            }
-        }
+        orthologs.removeIf(o -> Utils.stringsAreEqual(o.getXrefDataSrc(), "RGD"));
 
         for( Ortholog o: orthologs ) {
             logDeletedOrthologs.info(o.dump("|"));
