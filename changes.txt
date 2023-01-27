@@ -2,6 +2,9 @@ TODO: generate rat_genes_without_orthologs file
 TODO: generate multi ortholog assignment for rat
 TODO: logRgd -- inacurate, must be species-specific
 
+Jan 27, 2023
+  updated build.gradle to be gradle 6.x + compatible
+
 Jan 10, 2023
   added OrthoTool to generate mouse/human orthologs from AGR_ORTHOLOGY table for a given list of rat orthologs
 
