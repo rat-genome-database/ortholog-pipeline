@@ -1,6 +1,6 @@
 # master script to run the ortholog relationship data for all species
 #
-APPDIR=/home/rgddata/pipelines/OrthologRelationLoading
+APPDIR=/home/rgddata/pipelines/ortholog-pipeline
 SERVER=`hostname -s | tr '[a-z]' '[A-Z]'`
 
 #load human-to-species orthologs (only direct orthologs)

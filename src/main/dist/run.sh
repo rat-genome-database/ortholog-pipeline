@@ -3,7 +3,7 @@
 # ortholog loading pipeline wrapper script calling gradle-generated script
 #
 . /etc/profile
-APPNAME=OrthologRelationLoading
+APPNAME=ortholog-pipeline
 
 APPDIR=/home/rgddata/pipelines/$APPNAME
 cd $APPDIR

@@ -5,7 +5,7 @@
 # These duplicates for some genes cause erroneous ortholog assignments.
 #
 SERVER=`hostname -s | tr '[a-z]' '[A-Z]'`
-HOMEDIR=/home/rgddata/pipelines/OrthologRelationLoading
+HOMEDIR=/home/rgddata/pipelines/ortholog-pipeline
 EMAIL=mtutaj@mcw.edu
 
 ${HOMEDIR}/run.sh --fixXRefDataSet > fix.log

@@ -1,7 +1,7 @@
 # Load orthologs from AGR
 #
 SERVER=`hostname -s | tr '[a-z]' '[A-Z]'`
-HOMEDIR=/home/rgddata/pipelines/OrthologRelationLoading
+HOMEDIR=/home/rgddata/pipelines/ortholog-pipeline
 EMAIL=mtutaj@mcw.edu
 
 ${HOMEDIR}/run.sh --agrOrthologs --format=tsv > agrOrthologs.log
