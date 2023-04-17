@@ -62,70 +62,91 @@ public class AgrTsvLoader {
         int initialOrthologCount = getOrthologCount();
         log.info("initial ortholog count: "+initialOrthologCount);
 
-        AtomicInteger inserted = new AtomicInteger(0);
-        AtomicInteger updated = new AtomicInteger(0);
         AtomicInteger skipped = new AtomicInteger(0);
 
-        List<String> lines = loadLinesFromTsvFile();
-        Collections.shuffle(lines);
-        log.info("  LINES SHUFFLED");
+        // list of all lines with species that are in RGD
+        List<LineData> validLines = new ArrayList<>();
+        {
+            List<String> lines = loadLinesFromTsvFile();
+            Collections.shuffle(lines);
+            log.info("  lines read from tsv file: " + lines.size());
+
+            for( String line: lines ) {
+
+                // data line, f.e.
+                // HGNC:25018	TMEM216	NCBITaxon:9606	Homo sapiens	FB:FBgn0037615	CG11760	NCBITaxon:7227	Drosophila melanogaster	Ensembl Compara|InParanoid|Roundup|PhylomeDB|OMA|PANTHER|OrthoFinder|OrthoInspector|TreeFam|Hieranoid	10	10	Yes	Yes
+                String[] cols = line.split("[\\t]", -1);
+                String taxonName1 = cols[3]; // f.e. "Homo sapiens"
+                String taxonName2 = cols[7]; // f.e. "Homo sapiens"
+
+                int speciesTypeKey1 = SpeciesType.parse(taxonName1);
+                int speciesTypeKey2 = SpeciesType.parse(taxonName2);
+
+                if( !processedSpeciesTypeKeys.contains(speciesTypeKey1) ||
+                        !processedSpeciesTypeKeys.contains(speciesTypeKey2) ) {
+
+                    skipped.incrementAndGet();
+                    continue;
+                }
+
+                LineData d = new LineData();
+                d.taxonName1 = taxonName1;
+                d.taxonName2 = taxonName2;
+                d.speciesTypeKey1 = speciesTypeKey1;
+                d.speciesTypeKey2 = speciesTypeKey2;
+
+                d.curie1 = cols[0];
+                d.geneSymbol1 = cols[1];
+                d.taxonId1 = cols[2]; // f.e. "NCBITaxon:9606"
+                d.curie2 = cols[4];
+                d.geneSymbol2 = cols[5];
+                d.taxonId2 = cols[6]; // f.e. "NCBITaxon:9606"
+
+                d.algorithms = sortAlgorithmsStr(cols[8]);
+                d.algorithmsMatch = cols[9]; // f.e. "6"
+                d.outOfAlgorithms = cols[10]; // f.e. "9"
+                d.isBestScoreStr = cols[11]; // True of False
+                d.isBestRevScoreStr = cols[12]; // True or False
+                validLines.add(d);
+            }
+
+            log.info("  skipped  orthologs: "+skipped+" (species skipped from processing)");
+        }
+
+        Set<Integer> accXdbKeys = run2(validLines);
+
+        wrapUp(time0, initialOrthologCount, accXdbKeys);
+    }
+
+    public Set<Integer> run2(List<LineData> list) throws Exception {
+
+        AtomicInteger inserted = new AtomicInteger(0);
+        AtomicInteger updated = new AtomicInteger(0);
 
         Set<Integer> accXdbKeys = new HashSet<>();
 
-        //int i = 0;
-        for( String line: lines ) {
+        for( LineData d: list ) {
 
-            //log.debug((++i)+".");
-
-            // data line, f.e.
-            // HGNC:25018	TMEM216	NCBITaxon:9606	Homo sapiens	FB:FBgn0037615	CG11760	NCBITaxon:7227	Drosophila melanogaster	Ensembl Compara|InParanoid|Roundup|PhylomeDB|OMA|PANTHER|OrthoFinder|OrthoInspector|TreeFam|Hieranoid	10	10	Yes	Yes
-            String[] cols = line.split("[\\t]", -1);
-
-            String curie1 = cols[0];
-            String geneSymbol1 = cols[1];
-            String taxonId1 = cols[2]; // f.e. "NCBITaxon:9606"
-            String taxonName1 = cols[3]; // f.e. "Homo sapiens"
-            String curie2 = cols[4];
-            String geneSymbol2 = cols[5];
-            String taxonId2 = cols[6]; // f.e. "NCBITaxon:9606"
-            String taxonName2 = cols[7]; // f.e. "Homo sapiens"
-
-            String algorithms = sortAlgorithmsStr(cols[8]);
-            String algorithmsMatch = cols[9]; // f.e. "6"
-            String outOfAlgorithms = cols[10]; // f.e. "9"
-            String isBestScoreStr = cols[11]; // True of False
-            String isBestRevScoreStr = cols[12]; // True or False
-
-            int speciesTypeKey1 = SpeciesType.parse(taxonName1);
-            int speciesTypeKey2 = SpeciesType.parse(taxonName2);
-
-            if( !processedSpeciesTypeKeys.contains(speciesTypeKey1) ||
-                !processedSpeciesTypeKeys.contains(speciesTypeKey2) ) {
-
-                skipped.incrementAndGet();
-                continue;
-            }
-
-            Gene g1 = resolveGene(speciesTypeKey1, geneSymbol1, curie1);
+            Gene g1 = resolveGene(d.speciesTypeKey1, d.geneSymbol1, d.curie1);
             if( g1==null ) {
-                log.warn("WARN: cannot resolve gene ["+geneSymbol1+"] ["+curie1+"] "+taxonName1);
+                log.warn("WARN: cannot resolve gene ["+d.geneSymbol1+"] ["+d.curie1+"] "+d.taxonName1);
                 continue;
             }
-            resolveCurie(accXdbKeys, curie1, g1.getRgdId());
+            resolveCurie(accXdbKeys, d.curie1, g1.getRgdId());
 
-            Gene g2 = resolveGene(speciesTypeKey2, geneSymbol2, curie2);
+            Gene g2 = resolveGene(d.speciesTypeKey2, d.geneSymbol2, d.curie2);
             if( g2==null ) {
-                log.warn("WARN: cannot resolve gene ["+geneSymbol2+"] ["+curie2+"] "+taxonName2);
+                log.warn("WARN: cannot resolve gene ["+d.geneSymbol2+"] ["+d.curie2+"] "+d.taxonName2);
                 continue;
             }
-            resolveCurie(accXdbKeys, curie2, g2.getRgdId());
+            resolveCurie(accXdbKeys, d.curie2, g2.getRgdId());
 
-            boolean isBestScore = isBestScoreStr.equals("Yes");
-            boolean isBestRevScore = isBestRevScoreStr.equals("Yes");
+            boolean isBestScore = d.isBestScoreStr.equals("Yes");
+            boolean isBestRevScore = d.isBestRevScoreStr.equals("Yes");
 
             String confidence = "stringent";
 
-            int r = updateDb(g1.getRgdId(), g2.getRgdId(), confidence, isBestScore, isBestRevScore, algorithms);
+            int r = updateDb(g1.getRgdId(), g2.getRgdId(), confidence, isBestScore, isBestRevScore, d.algorithms);
             if( r==1 ) {
                 inserted.incrementAndGet();
             } else {
@@ -135,9 +156,8 @@ public class AgrTsvLoader {
 
         log.info("inserted orthologs: "+inserted);
         log.info("updated  orthologs: "+updated);
-        log.info("skipped  orthologs: "+skipped+" (species skipped from processing)");
 
-        wrapUp(time0, initialOrthologCount, accXdbKeys);
+        return accXdbKeys;
     }
 
     void resolveCurie(Set<Integer> xdbIdKeys, String curie, int rgdId) throws Exception {
@@ -146,7 +166,9 @@ public class AgrTsvLoader {
         List<XdbId> xdbIds = dao.getXdbIdsByRgdId(xdbKey, rgdId);
         for( XdbId xdbId: xdbIds ) {
             if( xdbId.getAccId().equals(curie) ) {
-                xdbIdKeys.add(xdbId.getKey());
+                synchronized (xdbIdKeys) {
+                    xdbIdKeys.add(xdbId.getKey());
+                }
                 return;
             }
         }
@@ -370,5 +392,27 @@ public class AgrTsvLoader {
 
     public Set<String> getProcessedSpecies() {
         return processedSpecies;
+    }
+
+    class LineData {
+
+        String curie1;
+        String geneSymbol1;
+        String taxonId1; // f.e. "NCBITaxon:9606"
+        String taxonName1; // f.e. "Homo sapiens"
+        String curie2;
+        String geneSymbol2;
+        String taxonId2; // f.e. "NCBITaxon:9606"
+        String taxonName2; // f.e. "Homo sapiens"
+
+        String algorithms;
+        String algorithmsMatch; // f.e. "6"
+        String outOfAlgorithms; // f.e. "9"
+        String isBestScoreStr; // True of False
+        String isBestRevScoreStr; // True or False
+
+        // derived fields
+        int speciesTypeKey1;
+        int speciesTypeKey2;
     }
 }
