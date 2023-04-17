@@ -562,8 +562,14 @@ public class OrthologRelationDao {
             }
         }
         if( genes.size()>1 ) {
-            log.warn("multiple genes for symbol "+geneSymbol+", species "+speciesTypeKey);
-            return null;
+            Collections.sort(genes, new Comparator<Gene>() {
+                        @Override
+                        public int compare(Gene o1, Gene o2) {
+                            return o1.getRgdId() - o2.getRgdId();
+                        }
+                    }
+            );
+            log.warn("multiple genes for symbol "+geneSymbol+", species "+speciesTypeKey+" : "+Utils.concatenate(",", genes, "getRgdId"));
         }
         return genes.isEmpty() ? null : genes.get(0);
     }

@@ -4,6 +4,7 @@ import edu.mcw.rgd.dao.impl.XdbIdDAO;
 import edu.mcw.rgd.datamodel.Gene;
 import edu.mcw.rgd.datamodel.SpeciesType;
 import edu.mcw.rgd.datamodel.XdbId;
+import edu.mcw.rgd.process.CounterPool;
 import edu.mcw.rgd.process.FileDownloader;
 import edu.mcw.rgd.process.Utils;
 import org.apache.logging.log4j.LogManager;
@@ -45,6 +46,8 @@ public class AgrTsvLoader {
     }
 
     public void run2() throws Exception {
+
+        long startTime = System.currentTimeMillis();
 
         // note: there could be disparity between oracle server time and the time on machine the pipeline is running,
         //  so to prevent deletion of valid orthologs (classified by the code as 'stale orthologs'),
@@ -113,46 +116,70 @@ public class AgrTsvLoader {
             log.info("  skipped  orthologs: "+skipped+" (species skipped from processing)");
         }
 
-        Set<Integer> accXdbKeys = run2(validLines);
+        CounterPool counters = new CounterPool();
+        Set<Integer> accXdbKeys = run2(validLines, counters);
 
         wrapUp(time0, initialOrthologCount, accXdbKeys);
+
+        log.info(counters.dumpAlphabetically());
+
+        log.info("===== OK =====   elapsed "+Utils.formatElapsedTime(startTime, System.currentTimeMillis()));
     }
 
-    public Set<Integer> run2(List<LineData> list) throws Exception {
+    public Set<Integer> run2(List<LineData> list, CounterPool counters) {
 
         AtomicInteger inserted = new AtomicInteger(0);
         AtomicInteger updated = new AtomicInteger(0);
 
         Set<Integer> accXdbKeys = new HashSet<>();
 
-        for( LineData d: list ) {
+        AtomicInteger remainingLines = new AtomicInteger(list.size());
 
-            Gene g1 = resolveGene(d.speciesTypeKey1, d.geneSymbol1, d.curie1);
-            if( g1==null ) {
-                log.warn("WARN: cannot resolve gene ["+d.geneSymbol1+"] ["+d.curie1+"] "+d.taxonName1);
-                continue;
+        list.parallelStream().forEach( d -> {
+
+            try {
+
+                boolean wasProcessedWithoutExceptions = false;
+                while( !wasProcessedWithoutExceptions ) {
+                    try {
+                        Gene g1 = resolveGene(d.speciesTypeKey1, d.geneSymbol1, d.curie1);
+                        if (g1 == null) {
+                            log.warn("WARN: cannot resolve gene [" + d.geneSymbol1 + "] [" + d.curie1 + "] " + d.taxonName1);
+                            return;
+                        }
+                        resolveCurie(accXdbKeys, d.curie1, g1.getRgdId());
+
+                        Gene g2 = resolveGene(d.speciesTypeKey2, d.geneSymbol2, d.curie2);
+                        if (g2 == null) {
+                            log.warn("WARN: cannot resolve gene [" + d.geneSymbol2 + "] [" + d.curie2 + "] " + d.taxonName2);
+                            return;
+                        }
+                        resolveCurie(accXdbKeys, d.curie2, g2.getRgdId());
+
+                        boolean isBestScore = d.isBestScoreStr.equals("Yes");
+                        boolean isBestRevScore = d.isBestRevScoreStr.equals("Yes");
+
+                        String confidence = "stringent";
+
+                        int r = updateDb(g1.getRgdId(), g2.getRgdId(), confidence, isBestScore, isBestRevScore, d.algorithms);
+                        if (r == 1) {
+                            inserted.incrementAndGet();
+                        } else {
+                            updated.incrementAndGet();
+                        }
+
+                        wasProcessedWithoutExceptions = true;
+                        remainingLines.decrementAndGet();
+
+                    } catch (org.springframework.dao.DuplicateKeyException ignore) {
+                        counters.increment("org.springframework.dao.DuplicateKeyException");
+                        log.debug("dao.DuplicateKeyException "+d.curie1+" "+d.curie2+"    remaining lines: "+remainingLines.get() );
+                    }
+                }
+            } catch(Exception e) {
+                throw new RuntimeException(e);
             }
-            resolveCurie(accXdbKeys, d.curie1, g1.getRgdId());
-
-            Gene g2 = resolveGene(d.speciesTypeKey2, d.geneSymbol2, d.curie2);
-            if( g2==null ) {
-                log.warn("WARN: cannot resolve gene ["+d.geneSymbol2+"] ["+d.curie2+"] "+d.taxonName2);
-                continue;
-            }
-            resolveCurie(accXdbKeys, d.curie2, g2.getRgdId());
-
-            boolean isBestScore = d.isBestScoreStr.equals("Yes");
-            boolean isBestRevScore = d.isBestRevScoreStr.equals("Yes");
-
-            String confidence = "stringent";
-
-            int r = updateDb(g1.getRgdId(), g2.getRgdId(), confidence, isBestScore, isBestRevScore, d.algorithms);
-            if( r==1 ) {
-                inserted.incrementAndGet();
-            } else {
-                updated.incrementAndGet();
-            }
-        }
+        });
 
         log.info("inserted orthologs: "+inserted);
         log.info("updated  orthologs: "+updated);
@@ -278,8 +305,6 @@ public class AgrTsvLoader {
 
         // QC AGR_GENE  curies
         dao.qcCuries(time0, curieAccXdbKeys, log);
-
-        log.info("===== OK =====   elapsed "+Utils.formatElapsedTime(time0.getTime(), System.currentTimeMillis()));
     }
 
     int getOrthologCount() throws Exception {
@@ -287,7 +312,7 @@ public class AgrTsvLoader {
         return xdao.getCount(sql);
     }
 
-    Gene resolveGene(int speciesTypeKey, String geneSymbol, String geneId) throws Exception {
+    synchronized Gene resolveGene(int speciesTypeKey, String geneSymbol, String geneId) throws Exception {
 
         Gene gene = null;
 
@@ -295,8 +320,13 @@ public class AgrTsvLoader {
         int xdbKey = 63; // AGR_GENE
         List<Gene> genes = dao.getGenesByXdbId(geneId, xdbKey);
         if( genes.size()>1 ) {
+            Collections.sort(genes, new Comparator<Gene>() {
+                @Override
+                public int compare(Gene o1, Gene o2) {
+                    return o1.getRgdId() - o2.getRgdId();
+                }
+            });
             log.warn("  *** MULTIPLE GENES FOR "+geneId+"  RGD:"+Utils.concatenate(",RGD:", genes, "getRgdId")+";  picking the first one");
-            gene = genes.get(0);
         }
         if( !genes.isEmpty() ) {
             gene = genes.get(0);
@@ -335,14 +365,6 @@ public class AgrTsvLoader {
         // if gene still not found, insert it
         if( gene==null ) {
             gene = dao.insertAgrGene(speciesTypeKey, geneSymbol, geneId);
-        } else {
-            // fixup for zebrafish
-            if( speciesTypeKey==SpeciesType.ZEBRAFISH ) {
-                List<XdbId> xdbIds = xdao.getXdbIdsByRgdId(63, gene.getRgdId());
-                if( xdbIds.isEmpty() ) {
-                    dao.insertAgrGeneXdbId(gene.getRgdId(), geneId);
-                }
-            }
         }
         return gene;
     }

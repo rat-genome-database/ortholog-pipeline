@@ -1,7 +1,7 @@
 <!DOCTYPE beans PUBLIC "-//SPRING//DTD BEAN//EN" "http://www.springframework.org/dtd/spring-beans.dtd">
 <beans>
 	<bean id="orthologRelationLoadingManager" class="edu.mcw.rgd.dataload.OrthologRelationLoadingManager">
-        <property name="version" value="Ortholog Relation Loader   -- build Apr 14, 2023"/>
+        <property name="version" value="Ortholog Relation Loader   -- build Apr 17, 2023"/>
 		<property name="orthologRelationParser" ref="orthologRelationParser"/>
 		<property name="orthologRelationLoader" ref="orthologRelationLoader"/>
 		<property name="rgdLogger" ref="rgdLogger"/>
@@ -72,8 +72,8 @@
 				<value>fly</value>
 				<value>roundworm</value>
 				<value>yeast</value>
-				<value>frog</value>
-				<value>platanna</value>
+				<value>African clawed frog</value>
+				<value>tropical clawed frog</value>
 			</set>
 		</property>
 	</bean>
