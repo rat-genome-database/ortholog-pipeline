@@ -505,6 +505,31 @@ public class OrthologRelationDao {
     }
     private Map<String, List<Gene>> _genesByXdbIdCache = new HashMap<>();
 
+    public Map<String,List<Integer>> getAllianceIdToGeneRgdIdMap() throws Exception {
+
+        Map<String,List<Integer>> result = new HashMap<>();
+
+        List<XdbId> xdbIds = xdbIdDAO.getActiveXdbIds(63, RgdId.OBJECT_KEY_GENES);
+        for( XdbId xdbId: xdbIds ) {
+
+            List<Integer> geneRgdIds = result.get(xdbId.getAccId());
+            if( geneRgdIds==null ) {
+                geneRgdIds = new ArrayList<>();
+                result.put(xdbId.getAccId(), geneRgdIds);
+            }
+            geneRgdIds.add(xdbId.getRgdId());
+        }
+
+        // sort lists with multiple gene rgd ids
+        for( List<Integer> geneRgdIds: result.values() ) {
+            if( geneRgdIds.size()>1 ) {
+                Collections.sort(geneRgdIds);
+            }
+        }
+
+        return result;
+    }
+
 
     /**
      * get status of object identified by rgd id
