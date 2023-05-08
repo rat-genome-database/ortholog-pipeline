@@ -521,11 +521,14 @@ public class OrthologRelationDao {
         }
 
         // sort lists with multiple gene rgd ids
+        int allianceIdsWithMultis = 0;
         for( List<Integer> geneRgdIds: result.values() ) {
             if( geneRgdIds.size()>1 ) {
                 Collections.sort(geneRgdIds);
+                allianceIdsWithMultis++;
             }
         }
+        System.out.println("   alliance ids with multiple gene rgd ids: "+allianceIdsWithMultis);
 
         return result;
     }

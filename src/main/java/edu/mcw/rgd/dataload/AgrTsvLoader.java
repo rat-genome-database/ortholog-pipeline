@@ -79,6 +79,8 @@ public class AgrTsvLoader {
             Collections.shuffle(lines);
             log.info("  lines read from tsv file: " + lines.size());
 
+            Set<String> agrCuries = new HashSet<>();
+
             for( String line: lines ) {
 
                 // data line, f.e.
@@ -116,9 +118,13 @@ public class AgrTsvLoader {
                 d.isBestScoreStr = cols[11]; // True of False
                 d.isBestRevScoreStr = cols[12]; // True or False
                 validLines.add(d);
+
+                agrCuries.add(d.curie1);
+                agrCuries.add(d.curie2);
             }
 
-            log.info("  skipped  orthologs: "+skipped+" (species skipped from processing)");
+            log.info("  incoming skipped  orthologs: "+skipped+" (species skipped from processing)");
+            log.info("  incoming unique agr curies: "+agrCuries.size());
         }
 
         CounterPool counters = new CounterPool();
@@ -147,14 +153,14 @@ public class AgrTsvLoader {
                 boolean wasProcessedWithoutExceptions = false;
                 while( !wasProcessedWithoutExceptions ) {
                     try {
-                        int g1RgdId = resolveGene(d.speciesTypeKey1, d.geneSymbol1, d.curie1);
+                        int g1RgdId = resolveGene(d.speciesTypeKey1, d.geneSymbol1, d.curie1, counters);
                         if (g1RgdId == 0) {
                             log.warn("WARN: cannot resolve gene [" + d.geneSymbol1 + "] [" + d.curie1 + "] " + d.taxonName1);
                             return;
                         }
                         resolveCurie(accXdbKeys, d.curie1, g1RgdId);
 
-                        int g2RgdId = resolveGene(d.speciesTypeKey2, d.geneSymbol2, d.curie2);
+                        int g2RgdId = resolveGene(d.speciesTypeKey2, d.geneSymbol2, d.curie2, counters);
                         if (g2RgdId == 0) {
                             log.warn("WARN: cannot resolve gene [" + d.geneSymbol2 + "] [" + d.curie2 + "] " + d.taxonName2);
                             return;
@@ -317,7 +323,7 @@ public class AgrTsvLoader {
         return xdao.getCount(sql);
     }
 
-    synchronized int resolveGene(int speciesTypeKey, String geneSymbol, String geneId) throws Exception {
+    synchronized int resolveGene(int speciesTypeKey, String geneSymbol, String geneId, CounterPool counters) throws Exception {
 
         int geneRgdId = 0;
 
@@ -345,6 +351,7 @@ public class AgrTsvLoader {
             }
             if (!geneRgdIds.isEmpty()) {
                 geneRgdId = geneRgdIds.get(0);
+                counters.increment("RESOLVE_GENE from map");
             }
         }
 
@@ -373,6 +380,7 @@ public class AgrTsvLoader {
             if( geneRgdId!=0 ) {
                 // gene resolved: insert AGR_GENE xdbid
                 dao.insertAgrGeneXdbId(geneRgdId, geneId);
+                counters.increment("RESOLVE_GENE by rat/mouse/human special id");
             }
         }
 
@@ -381,6 +389,7 @@ public class AgrTsvLoader {
             Gene gene = dao.getGeneBySymbol(geneSymbol, speciesTypeKey, log);
             if( gene!=null ) {
                 geneRgdId = gene.getRgdId();
+                counters.increment("RESOLVE_GENE by gene symbol");
             }
         }
 
@@ -389,6 +398,7 @@ public class AgrTsvLoader {
             Gene gene = dao.insertAgrGene(speciesTypeKey, geneSymbol, geneId);
             if( gene!=null ) {
                 geneRgdId = gene.getRgdId();
+                counters.increment("RESOLVE_GENE by insertion");
             }
         }
         return geneRgdId;
