@@ -141,29 +141,33 @@ public class AgrTsvLoader {
 
         AtomicInteger inserted = new AtomicInteger(0);
         AtomicInteger updated = new AtomicInteger(0);
+        AtomicInteger skipped = new AtomicInteger(0);
 
         Set<Integer> accXdbKeys = new HashSet<>();
 
         AtomicInteger remainingLines = new AtomicInteger(list.size());
 
+        //for( LineData d: list ) {
         list.parallelStream().forEach( d -> {
 
             try {
 
                 boolean wasProcessedWithoutExceptions = false;
-                while( !wasProcessedWithoutExceptions ) {
+                while (!wasProcessedWithoutExceptions) {
                     try {
                         int g1RgdId = resolveGene(d.speciesTypeKey1, d.geneSymbol1, d.curie1, counters);
                         if (g1RgdId == 0) {
                             log.warn("WARN: cannot resolve gene [" + d.geneSymbol1 + "] [" + d.curie1 + "] " + d.taxonName1);
-                            return;
+                            skipped.incrementAndGet();
+                            break;
                         }
                         resolveCurie(accXdbKeys, d.curie1, g1RgdId);
 
                         int g2RgdId = resolveGene(d.speciesTypeKey2, d.geneSymbol2, d.curie2, counters);
                         if (g2RgdId == 0) {
                             log.warn("WARN: cannot resolve gene [" + d.geneSymbol2 + "] [" + d.curie2 + "] " + d.taxonName2);
-                            return;
+                            skipped.incrementAndGet();
+                            break;
                         }
                         resolveCurie(accXdbKeys, d.curie2, g2RgdId);
 
@@ -184,16 +188,18 @@ public class AgrTsvLoader {
 
                     } catch (org.springframework.dao.DuplicateKeyException ignore) {
                         counters.increment("org.springframework.dao.DuplicateKeyException");
-                        log.debug("dao.DuplicateKeyException "+d.curie1+" "+d.curie2+"    remaining lines: "+remainingLines.get() );
+                        log.debug("dao.DuplicateKeyException " + d.curie1 + " " + d.curie2 + "    remaining lines: " + remainingLines.get());
                     }
                 }
-            } catch(Exception e) {
+            } catch (Exception e) {
                 throw new RuntimeException(e);
             }
-        });
+            //});
+        }
 
         log.info("inserted orthologs: "+inserted);
         log.info("updated  orthologs: "+updated);
+        log.info("skipped  orthologs: "+skipped);
 
         return accXdbKeys;
     }
@@ -389,6 +395,8 @@ public class AgrTsvLoader {
             Gene gene = dao.getGeneBySymbol(geneSymbol, speciesTypeKey, log);
             if( gene!=null ) {
                 geneRgdId = gene.getRgdId();
+                // gene resolved: insert AGR_GENE xdbid
+                dao.insertAgrGeneXdbId(geneRgdId, geneId);
                 counters.increment("RESOLVE_GENE by gene symbol");
             }
         }
