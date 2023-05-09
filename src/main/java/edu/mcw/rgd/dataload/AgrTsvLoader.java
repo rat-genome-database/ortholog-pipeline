@@ -194,8 +194,8 @@ public class AgrTsvLoader {
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
-            //});
-        }
+        });
+        //}
 
         log.info("inserted orthologs: "+inserted);
         log.info("updated  orthologs: "+updated);
