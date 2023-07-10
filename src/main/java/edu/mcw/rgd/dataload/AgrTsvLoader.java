@@ -261,9 +261,9 @@ public class AgrTsvLoader {
     String downloadTsvFile() throws Exception {
         FileDownloader fd = new FileDownloader();
         fd.setUseCompression(true);
-        fd.setPrependDateStamp(true);
+        fd.setAppendDateStamp(true);
         fd.setExternalFile(getAllianceFile());
-        fd.setLocalFile("data/ORTHOLOGY-ALLIANCE_COMBINED.tsv");
+        fd.setLocalFile("data/alliance.tsv");
         String localFile = fd.downloadNew();
         log.info("downloaded "+getAllianceFile());
         return localFile;
