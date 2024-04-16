@@ -6,4 +6,4 @@
 SERVER=`hostname -s | tr '[a-z]' '[A-Z]'`
 HOMEDIR=/home/rgddata/pipelines/ortholog-pipeline
 
-${HOMEDIR}/run.sh --species $1 > ${HOMEDIR}/$1.log
+${HOMEDIR}/run.sh --species "$1" > ${HOMEDIR}/"$1".log

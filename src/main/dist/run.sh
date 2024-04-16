@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 #
-# ortholog loading pipeline wrapper script calling gradle-generated script
-#
 . /etc/profile
 APPNAME=ortholog-pipeline
 
