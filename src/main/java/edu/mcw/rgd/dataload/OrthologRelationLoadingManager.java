@@ -54,25 +54,24 @@ public class OrthologRelationLoadingManager {
         int speciesTypeKey = SpeciesType.ALL;
         boolean fixXrefDataSet = false;
         boolean agrOrthologs = false;
+        boolean runForAllSpecies = false;
         String format = null;
 
         for( int i=0; i<args.length; i++ ) {
-            switch(args[i]) {
-                case "--fixXRefDataSet":
-                    fixXrefDataSet = true;
-                    break;
-                case "--species":
-                    speciesTypeKey = SpeciesType.parse(args[++i]);
-                    break;
-                case "--agrOrthologs":
-                    agrOrthologs = true;
-                    break;
-                case "--format=api": // parameter for agrOrthologs
-                    format = "api";
-                    break;
-                case "--format=tsv": // parameter for agrOrthologs
-                    format = "tsv";
-                    break;
+            switch (args[i]) {
+                case "--fixXRefDataSet" -> fixXrefDataSet = true;
+                case "--species" -> {
+                    String species = args[++i];
+                    if( species.equalsIgnoreCase("all") ) {
+                        runForAllSpecies = true;
+                    }
+                    speciesTypeKey = SpeciesType.parse(species);
+                }
+                case "--agrOrthologs" -> agrOrthologs = true;
+                case "--format=api" -> // parameter for agrOrthologs
+                        format = "api";
+                case "--format=tsv" -> // parameter for agrOrthologs
+                        format = "tsv";
             }
         }
 
@@ -89,8 +88,19 @@ public class OrthologRelationLoadingManager {
                 return;
             }
 
+            if( runForAllSpecies ) {
+
+                Collection<Integer> speciesInRgd = SpeciesType.getSpeciesTypeKeys();
+                for( int spTypeKey: speciesInRgd ) {
+                    if( SpeciesType.isSearchable(spTypeKey) && spTypeKey!=SpeciesType.HUMAN ) {
+                        _instance.run(spTypeKey);
+                    }
+                }
+                return;
+            }
+
             if( speciesTypeKey==SpeciesType.ALL || speciesTypeKey==SpeciesType.HUMAN ) {
-                System.out.println("ERROR: --cmdline parameter --species not specified or --species==human");
+                System.out.println("ERROR: --cmdline parameter --species not specified or --species is 'human'");
                 System.exit(-1);
                 return;
             }

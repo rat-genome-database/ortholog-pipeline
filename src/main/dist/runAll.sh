@@ -1,16 +1,12 @@
-# master script to run the ortholog relationship data for all species
+# master script to run the ortholog relationship data for all species that are public in RGD
+#  (SPECIES_TYPES.IS_SEARCHABLE=1)
+# load human-to-species and species-to-human orthologs (only direct orthologs)
 #
 APPDIR=/home/rgddata/pipelines/ortholog-pipeline
 SERVER=`hostname -s | tr '[a-z]' '[A-Z]'`
 
-#load human-to-species orthologs (only direct orthologs)
-#  species name must be exactly as it is in SPECIES_TYPE.SHORT_NAME
-SPECIES_LIST=( "mouse" "rat" "dog" "bonobo" "squirrel" "chinchilla" "pig" "vervet" "molerat" )
-
 export SKIP_EMAIL_SUMMARY=1
-for SPECIES in "${SPECIES_LIST[@]}"; do
-    $APPDIR/loadSpecies.sh "$SPECIES" "$@"
-done
+$APPDIR/loadSpecies.sh all "$@"
 
 #send summary email
 EMAIL=mtutaj@mcw.edu
