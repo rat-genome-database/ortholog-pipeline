@@ -70,6 +70,12 @@ public class OrthologRelationLoader {
         addWeakOrthologs(associations, weakOrthologs);
         dropStrongOrthologsFromAssociations(associations);
         processOrthologAssociations(associations, speciesTypeKey);
+
+        // ensure there no duplicate orthologs
+        int duplicateOrthologsDeleted = dao.deleteDuplicateNonManualOrthologs(getCreatedBy());
+        if( duplicateOrthologsDeleted != 0 ) {
+            process.info("CLEANUP: deleted "+duplicateOrthologsDeleted+" orthologs that were the same as existing manual orthologs!");
+        }
     }
 
     // drop relations that could not be mapped to RGD
@@ -458,8 +464,8 @@ public class OrthologRelationLoader {
         // turn the relation into an ortholog
         Ortholog o = new Ortholog();
         o.setXrefDataSrc(bestFitRel.getDataSource());
-        o.setCreatedBy(70);
-        o.setLastModifiedBy(70);
+        o.setCreatedBy(getCreatedBy());
+        o.setLastModifiedBy(getCreatedBy());
         o.setCreatedDate(new Date());
         o.setLastModifiedDate(new Date());
 

@@ -773,6 +773,20 @@ public class OrthologRelationDao {
         return associationDAO.getAssociationCountByType(assocType, masterSpeciesTypeKey, detailSpeciesTypeKey);
     }
 
+    public int deleteDuplicateNonManualOrthologs( int orthologPipelineId ) throws Exception {
+
+        // o1 - manual orthologs: orthologs enforced by RGD curators
+        // o2 - orthologs created by this pipeline
+        String sql = """
+            DELETE FROM genetogene_rgd_id_rlt WHERE genetogene_key IN(
+              SELECT o2.genetogene_key FROM  genetogene_rgd_id_rlt o1,genetogene_rgd_id_rlt o2
+              WHERE o1.genetogene_key<>o2.genetogene_key AND o1.src_rgd_id=o2.src_rgd_id AND o1.dest_rgd_id=o2.dest_rgd_id
+                AND o1.xref_data_src='RGD' AND o2.xref_data_src<>'RGD'
+            ) AND created_by=?
+            """;
+        return orthologDAO.update(sql, orthologPipelineId);
+    }
+
     public DataSource getDataSource() throws Exception {
         return orthologDAO.getDataSource();
     }
