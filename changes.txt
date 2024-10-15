@@ -2,6 +2,9 @@ TODO: generate rat_genes_without_orthologs file
 TODO: generate multi ortholog assignment for rat
 TODO: logRgd -- inacurate, must be species-specific
 
+Oct 15, 2024
+  updated dependencies
+
 Jul 03, 2024
   implemented cleanup of duplicate orthologs
   (deletion of orthologs created by this pipeline, orthologs that happen to be the same as existing manual orthologs)
