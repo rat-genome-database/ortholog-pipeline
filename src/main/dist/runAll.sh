@@ -11,6 +11,6 @@ $APPDIR/loadSpecies.sh all "$@"
 #send summary email
 EMAIL=mtutaj@mcw.edu
 if [ "$SERVER" = "REED" ]; then
-  EMAIL_LIST=mtutaj@mcw.edu,slaulederkind@mcw.edu
+  EMAIL_LIST="mtutaj@mcw.edu slaulederkind@mcw.edu"
 fi
 mailx -s "[$SERVER] RGD orthologs OK" $EMAIL < ${APPDIR}/logs/status.log

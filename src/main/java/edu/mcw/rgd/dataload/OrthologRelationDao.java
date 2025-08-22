@@ -655,17 +655,19 @@ public class OrthologRelationDao {
 
     public List<String> getCrossLinkedOrthologs(int speciesTypeKey) throws Exception {
 
-        String sql = "SELECT g.rgd_id,g.gene_symbol FROM genes g WHERE g.rgd_id IN(\n" +
-                "SELECT dest_rgd_id FROM GENETOGENE_RGD_ID_RLT,rgd_ids r1,rgd_ids r2\n" +
-                "WHERE dest_rgd_id=r1.rgd_id AND r1.object_status='ACTIVE' AND r1.species_type_key=?\n" +
-                "  AND src_rgd_id=r2.rgd_id AND r2.object_status='ACTIVE' AND r2.species_type_key IN(1,2,3)\n" +
-                "GROUP BY dest_rgd_id HAVING COUNT(*)>2\n" +
-                "UNION\n" +
-                "SELECT src_rgd_id FROM GENETOGENE_RGD_ID_RLT,rgd_ids r1,rgd_ids r2\n" +
-                "WHERE src_rgd_id=r1.rgd_id AND r1.object_status='ACTIVE' AND r1.species_type_key=?\n" +
-                "  AND dest_rgd_id=r2.rgd_id AND r2.object_status='ACTIVE' AND r2.species_type_key IN(1,2,3)\n" +
-                "GROUP BY src_rgd_id HAVING COUNT(*)>2\n" +
-                ") ORDER BY LOWER(gene_symbol)";
+        String sql = """
+            SELECT g.rgd_id,g.gene_symbol FROM genes g WHERE g.rgd_id IN(
+              SELECT dest_rgd_id FROM GENETOGENE_RGD_ID_RLT,rgd_ids r1,rgd_ids r2
+              WHERE dest_rgd_id=r1.rgd_id AND r1.object_status='ACTIVE' AND r1.species_type_key=?
+                AND src_rgd_id=r2.rgd_id AND r2.object_status='ACTIVE' AND r2.species_type_key IN(1,2,3)
+              GROUP BY dest_rgd_id HAVING COUNT(*)>2
+              UNION
+              SELECT src_rgd_id FROM GENETOGENE_RGD_ID_RLT,rgd_ids r1,rgd_ids r2
+              WHERE src_rgd_id=r1.rgd_id AND r1.object_status='ACTIVE' AND r1.species_type_key=?
+              AND dest_rgd_id=r2.rgd_id AND r2.object_status='ACTIVE' AND r2.species_type_key IN(1,2,3)
+              GROUP BY src_rgd_id HAVING COUNT(*)>2
+            ) ORDER BY LOWER(gene_symbol)
+            """;
 
         return StringListQuery.execute(geneDAO, sql, speciesTypeKey, speciesTypeKey);
     }
