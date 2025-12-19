@@ -431,9 +431,12 @@ public class AgrTsvLoader {
                     "|IS_BEST:"+bestScore+"|IS_BEST_REV:"+bestRevScore+"|METHODS_MATCHED:"+methodsMatched);
             return 1;
         } else{
-            final String sql = "UPDATE agr_orthologs SET confidence=?, is_best_score=?, is_best_rev_score=?, " +
-                    "last_update_date=SYSDATE " +
-                    "WHERE gene_rgd_id_1=? AND gene_rgd_id_2=? AND methods_matched=?";
+            // update only one row with the condition mentioned, to avoid duplicates
+            final String sql = """
+                UPDATE agr_orthologs SET confidence=?, is_best_score=?, is_best_rev_score=?, last_update_date=SYSDATE
+                WHERE gene_rgd_id_1=? AND gene_rgd_id_2=? AND methods_matched=?
+                  AND ROWNUM<2
+                """;
 
             xdao.update(sql, confidence, bestScore, bestRevScore, rgdId1, rgdId2, methodsMatched);
             return 0;
