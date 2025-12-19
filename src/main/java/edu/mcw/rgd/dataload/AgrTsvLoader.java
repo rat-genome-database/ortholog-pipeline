@@ -13,6 +13,7 @@ import org.springframework.jdbc.core.SqlParameter;
 import org.springframework.jdbc.object.MappingSqlQuery;
 
 import java.io.BufferedReader;
+import java.nio.charset.StandardCharsets;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
@@ -106,10 +107,10 @@ public class AgrTsvLoader {
                 d.speciesTypeKey2 = speciesTypeKey2;
 
                 d.curie1 = cols[0];
-                d.geneSymbol1 = cols[1];
+                d.geneSymbol1 = parseSymbol(cols[1]);
                 d.taxonId1 = cols[2]; // f.e. "NCBITaxon:9606"
                 d.curie2 = cols[4];
-                d.geneSymbol2 = cols[5];
+                d.geneSymbol2 = parseSymbol(cols[5]);
                 d.taxonId2 = cols[6]; // f.e. "NCBITaxon:9606"
 
                 d.algorithms = sortAlgorithmsStr(cols[8]);
@@ -147,8 +148,7 @@ public class AgrTsvLoader {
 
         AtomicInteger remainingLines = new AtomicInteger(list.size());
 
-        //for( LineData d: list ) {
-        list.parallelStream().forEach( d -> {
+        list.stream().parallel().forEach( d -> {
 
             try {
 
@@ -230,7 +230,7 @@ public class AgrTsvLoader {
     List<String> loadLinesFromTsvFile() throws Exception {
 
         String localFile = downloadTsvFile();
-        BufferedReader in = Utils.openReader(localFile);
+        BufferedReader in = Utils.openReaderUtf8(localFile);
         int dataLinesRead = 0;
         List<String> lines = new ArrayList<>();
 
@@ -403,6 +403,7 @@ public class AgrTsvLoader {
 
         // if gene still not found, insert it
         if( geneRgdId==0 ) {
+            log.debug("trying to insert agr gene: species="+speciesTypeKey+", geneSymbol=["+geneSymbol+"], geneId="+geneId);
             Gene gene = dao.insertAgrGene(speciesTypeKey, geneSymbol, geneId);
             if( gene!=null ) {
                 geneRgdId = gene.getRgdId();
@@ -437,6 +438,57 @@ public class AgrTsvLoader {
             xdao.update(sql, confidence, bestScore, bestRevScore, rgdId1, rgdId2, methodsMatched);
             return 0;
         }
+    }
+
+    String parseSymbol( String s ) {
+
+        String s2 = s;
+        byte[] b2 = s.getBytes(StandardCharsets.UTF_8);
+        if( b2.length != s.length() ) {
+
+            StringBuffer out = new StringBuffer();
+            for( int i=0; i<s.length(); i++ ) {
+                char c = s.charAt(i);
+                int codePoint = s.codePointAt(i);
+                if( codePoint==916 ) {
+                    out.append("DELTA");
+                } else if( codePoint==945 ) {
+                    out.append("alpha");
+                } else if( codePoint==946 ) {
+                    out.append("beta");
+                } else if( codePoint==947 ) {
+                    out.append("gamma");
+                } else if( codePoint==948 ) {
+                    out.append("delta");
+                } else if( codePoint==949 ) {
+                    out.append("epsilon");
+                } else if( codePoint==950 ) {
+                    out.append("zeta");
+                } else if( codePoint==951 ) {
+                    out.append("lambda");
+                } else if( codePoint==952 ) {
+                    out.append("theta");
+                } else if( codePoint==953 ) {
+                    out.append("iota");
+                } else if( codePoint==954 ) {
+                    out.append("kappa");
+                } else if( codePoint==955 ) {
+                    out.append("lambda");
+                } else if( codePoint==956 ) {
+                    out.append("mu");
+                } else if( codePoint==963 ) {
+                    out.append("sigma");
+                } else if( codePoint > 127 ) {
+                    log.error("#### unhandled char with codepoint "+codePoint);
+                } else {
+                    out.append(c);
+                }
+            }
+
+            s2 = out.toString();
+            //System.out.println(s+" "+s2);
+        }
+        return s2;
     }
 
     public void setAllianceFile(String allianceFile) {
