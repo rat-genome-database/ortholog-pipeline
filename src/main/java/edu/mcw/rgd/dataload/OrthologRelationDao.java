@@ -789,10 +789,6 @@ public class OrthologRelationDao {
         return orthologDAO.update(sql, orthologPipelineId);
     }
 
-    public DataSource getDataSource() throws Exception {
-        return orthologDAO.getDataSource();
-    }
-
     public void setDirectOrthologTypeKey(int directOrthologTypeKey) {
         this.directOrthologTypeKey = directOrthologTypeKey;
     }

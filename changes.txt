@@ -2,6 +2,9 @@ TODO: generate rat_genes_without_orthologs file
 TODO: generate multi ortholog assignment for rat
 TODO: logRgd -- inacurate, must be species-specific
 
+Feb 2, 2026
+  agr orthologs: added logging of conflicts
+  
 Dec 19, 2025
   agr orthologs: added handling of greek characters in gene symbols
 

@@ -1,5 +1,6 @@
 package edu.mcw.rgd.dataload;
 
+import edu.mcw.rgd.dao.impl.GeneDAO;
 import edu.mcw.rgd.dao.impl.XdbIdDAO;
 import edu.mcw.rgd.datamodel.Gene;
 import edu.mcw.rgd.datamodel.SpeciesType;
@@ -38,6 +39,8 @@ public class AgrTsvLoader {
 
     Map <String, List<Integer>> allianceIdToGeneRgdIdMap;
 
+    boolean qcSymbolsForHumanGenes = true;
+
     public void run() throws Exception {
 
         try {
@@ -57,6 +60,27 @@ public class AgrTsvLoader {
         //  we use the as the cutoff timestamp the machine timestamp minus one hour
         Date time0 = Utils.addHoursToDate(new Date(), -1); // time0 = current day-and-time less 1 hour
 
+        int initialOrthologCount = getOrthologCount();
+        log.info("initial ortholog count: "+initialOrthologCount);
+
+        allianceIdToGeneRgdIdMap = dao.getAllianceIdToGeneRgdIdMap();
+        log.info("loaded map of alliance-id to active-gene-in-rgd: "+allianceIdToGeneRgdIdMap.size());
+
+        // list of all lines with species that are in RGD
+        List<LineData> validLines = loadLines();
+
+        CounterPool counters = new CounterPool();
+        Set<Integer> accXdbKeys = run2(validLines, counters);
+
+        wrapUp(time0, initialOrthologCount, accXdbKeys);
+
+        log.info(counters.dumpAlphabetically());
+
+        log.info("===== OK =====   elapsed "+Utils.formatElapsedTime(startTime, System.currentTimeMillis()));
+    }
+
+    List<LineData> loadLines() throws Exception {
+
         Set<Integer> processedSpeciesTypeKeys = new HashSet<>();
         for( String processedSpeciesName: getProcessedSpecies() ) {
             int sp = SpeciesType.parse(processedSpeciesName);
@@ -64,12 +88,6 @@ public class AgrTsvLoader {
                 processedSpeciesTypeKeys.add(sp);
             }
         }
-
-        int initialOrthologCount = getOrthologCount();
-        log.info("initial ortholog count: "+initialOrthologCount);
-
-        allianceIdToGeneRgdIdMap = dao.getAllianceIdToGeneRgdIdMap();
-        log.info("loaded map of alliance-id to active-gene-in-rgd: "+allianceIdToGeneRgdIdMap.size());
 
         AtomicInteger skipped = new AtomicInteger(0);
 
@@ -128,14 +146,7 @@ public class AgrTsvLoader {
             log.info("  incoming unique agr curies: "+agrCuries.size());
         }
 
-        CounterPool counters = new CounterPool();
-        Set<Integer> accXdbKeys = run2(validLines, counters);
-
-        wrapUp(time0, initialOrthologCount, accXdbKeys);
-
-        log.info(counters.dumpAlphabetically());
-
-        log.info("===== OK =====   elapsed "+Utils.formatElapsedTime(startTime, System.currentTimeMillis()));
+        return validLines;
     }
 
     public Set<Integer> run2(List<LineData> list, CounterPool counters) {
@@ -358,6 +369,11 @@ public class AgrTsvLoader {
             if (!geneRgdIds.isEmpty()) {
                 geneRgdId = geneRgdIds.get(0);
                 counters.increment("RESOLVE_GENE from map");
+
+                int issues = validateGeneSymbol(speciesTypeKey, geneSymbol, geneId, geneRgdId);
+                if( issues!=0 ) {
+                    counters.add("*** GENE SYMBOL PROBLEMS", issues);
+                }
             }
         }
 
@@ -411,6 +427,38 @@ public class AgrTsvLoader {
             }
         }
         return geneRgdId;
+    }
+
+    int validateGeneSymbol(int speciesTypeKey, String geneSymbol, String geneId, int geneRgdId) throws Exception {
+
+        if( !this.qcSymbolsForHumanGenes ) {
+            return 0;
+        }
+
+        int issueCount = 0;
+
+        if( speciesTypeKey==SpeciesType.HUMAN ) {
+
+            List<Gene> genes = new XdbIdDAO().getActiveGenesByXdbId(63, geneId);
+            for( Gene g: genes ) {
+                if( !Utils.stringsAreEqualIgnoreCase(g.getSymbol(), geneSymbol) ) {
+                    System.out.println("WARNING! Alliance gene-id "+geneId+" points to gene RGD:"+g.getRgdId()+" ["+g.getSymbol()+"]");
+                    System.out.println("    Alliance had gene symbol ["+geneSymbol+"]");
+                    issueCount++;
+                }
+            }
+
+            Gene g = new GeneDAO().getGene(geneRgdId);
+            {
+                if( !Utils.stringsAreEqualIgnoreCase(g.getSymbol(), geneSymbol) ) {
+                    System.out.println("WARNING! Matching gene RGD:"+g.getRgdId()+" ["+g.getSymbol()+"]");
+                    System.out.println("    Alliance had gene symbol ["+geneSymbol+"]");
+                    issueCount++;
+                }
+            }
+        }
+
+        return issueCount;
     }
 
     int updateDb(int rgdId1, int rgdId2, String confidence, boolean isBestScore, boolean isBestRevScore, String methodsMatched) throws Exception {
