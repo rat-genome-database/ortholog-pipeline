@@ -370,7 +370,7 @@ public class AgrTsvLoader {
                 geneRgdId = geneRgdIds.get(0);
                 counters.increment("RESOLVE_GENE from map");
 
-                int issues = validateGeneSymbol(speciesTypeKey, geneSymbol, geneId, geneRgdId);
+                int issues = validateGeneSymbol(speciesTypeKey, geneSymbol, geneId, geneRgdId, counters);
                 if( issues!=0 ) {
                     counters.add("*** GENE SYMBOL PROBLEMS", issues);
                 }
@@ -429,7 +429,7 @@ public class AgrTsvLoader {
         return geneRgdId;
     }
 
-    int validateGeneSymbol(int speciesTypeKey, String geneSymbol, String geneId, int geneRgdId) throws Exception {
+    int validateGeneSymbol(int speciesTypeKey, String geneSymbol, String geneId, int geneRgdId, CounterPool counters) throws Exception {
 
         if( !this.qcSymbolsForHumanGenes ) {
             return 0;
@@ -442,18 +442,28 @@ public class AgrTsvLoader {
             List<Gene> genes = new XdbIdDAO().getActiveGenesByXdbId(63, geneId);
             for( Gene g: genes ) {
                 if( !Utils.stringsAreEqualIgnoreCase(g.getSymbol(), geneSymbol) ) {
-                    System.out.println("WARNING! Alliance gene-id "+geneId+" points to gene RGD:"+g.getRgdId()+" ["+g.getSymbol()+"]");
-                    System.out.println("    Alliance had gene symbol ["+geneSymbol+"]");
-                    issueCount++;
+
+                    if( !Utils.stringsAreEqualIgnoreCase(g.getEnsemblGeneSymbol(), geneSymbol) ) {
+                        System.out.println("WARNING! Alliance gene-id " + geneId + " points to gene RGD:" + g.getRgdId() + " [" + g.getSymbol() + "]");
+                        System.out.println("    Alliance had gene symbol [" + geneSymbol + "]");
+                        issueCount++;
+                    } else {
+                        counters.increment("Alliance matches by Ensembl gene symbol");
+                    }
                 }
             }
 
             Gene g = new GeneDAO().getGene(geneRgdId);
             {
                 if( !Utils.stringsAreEqualIgnoreCase(g.getSymbol(), geneSymbol) ) {
-                    System.out.println("WARNING! Matching gene RGD:"+g.getRgdId()+" ["+g.getSymbol()+"]");
-                    System.out.println("    Alliance had gene symbol ["+geneSymbol+"]");
-                    issueCount++;
+
+                    if( !Utils.stringsAreEqualIgnoreCase(g.getEnsemblGeneSymbol(), geneSymbol) ) {
+                        System.out.println("WARNING! Matching gene RGD:" + g.getRgdId() + " [" + g.getSymbol() + "]");
+                        System.out.println("    Alliance had gene symbol [" + geneSymbol + "]");
+                        issueCount++;
+                    } else {
+                        counters.increment("Alliance matches by Ensembl gene symbol");
+                    }
                 }
             }
         }
