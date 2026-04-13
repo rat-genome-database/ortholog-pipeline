@@ -5,6 +5,7 @@ TODO: logRgd -- inacurate, must be species-specific
 Apr 13, 2026
   added MemoryMonitor; updated dependencies
   removed AgrLoader (replaced by AgrTsvLoader); removed json-simple dependency
+  moved GeneDAO and XdbIdDAO usage from AgrTsvLoader into OrthologRelationDao
 
 Feb 2, 2026
   agr orthologs: added logging of conflicts

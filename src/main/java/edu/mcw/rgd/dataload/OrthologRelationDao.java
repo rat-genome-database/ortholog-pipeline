@@ -11,7 +11,13 @@ import edu.mcw.rgd.process.Utils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import org.springframework.jdbc.core.SqlParameter;
+import org.springframework.jdbc.object.MappingSqlQuery;
+
 import javax.sql.DataSource;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Types;
 
 /*
  * Created on Mar 28, 2007
@@ -21,6 +27,8 @@ public class OrthologRelationDao {
     protected final Logger logger = LogManager.getLogger("process");
     protected final Logger logInsertedOrthologs = LogManager.getLogger("inserted_orthologs");
     public final Logger logDeletedOrthologs = LogManager.getLogger("deleted_orthologs");
+    final Logger logDeletedAgrOrthologs = LogManager.getLogger("deletedAgrOrthologs");
+    final Logger logInsertedAgrOrthologs = LogManager.getLogger("insertedAgrOrthologs");
 
     private OrthologDAO orthologDAO = new OrthologDAO();
     private RGDManagementDAO rgdIdDAO = new RGDManagementDAO();
@@ -528,7 +536,7 @@ public class OrthologRelationDao {
                 allianceIdsWithMultis++;
             }
         }
-        System.out.println("   alliance ids with multiple gene rgd ids: "+allianceIdsWithMultis);
+        logger.info("   alliance ids with multiple gene rgd ids: "+allianceIdsWithMultis);
 
         return result;
     }
@@ -787,6 +795,64 @@ public class OrthologRelationDao {
             ) AND created_by=?
             """;
         return orthologDAO.update(sql, orthologPipelineId);
+    }
+
+    public int getAgrOrthologCount() throws Exception {
+        return xdbIdDAO.getCount("SELECT COUNT(0) FROM agr_orthologs");
+    }
+
+    public int upsertAgrOrtholog(int rgdId1, int rgdId2, String confidence, boolean isBestScore, boolean isBestRevScore, String methodsMatched) throws Exception {
+
+        String bestScore = isBestScore ? "Y" : "N";
+        String bestRevScore = isBestRevScore ? "Y" : "N";
+
+        String sql1 = "SELECT COUNT(0) FROM agr_orthologs WHERE gene_rgd_id_1=? AND gene_rgd_id_2=? AND methods_matched=?";
+        int dataExists = xdbIdDAO.getCount(sql1, rgdId1, rgdId2, methodsMatched);
+        if( dataExists==0 ) {
+            final String sql = "INSERT INTO agr_orthologs (gene_rgd_id_1, gene_rgd_id_2, confidence, is_best_score, "+
+                    "is_best_rev_score, methods_matched, last_update_date) "+
+                    "VALUES(?,?,?,?,?,?,SYSDATE)";
+            xdbIdDAO.update(sql, rgdId1, rgdId2, confidence, bestScore, bestRevScore, methodsMatched);
+            logInsertedAgrOrthologs.debug("RGD1:"+rgdId1+"|RGD2:"+rgdId2+"|"+confidence+
+                    "|IS_BEST:"+bestScore+"|IS_BEST_REV:"+bestRevScore+"|METHODS_MATCHED:"+methodsMatched);
+            return 1;
+        } else {
+            final String sql = """
+                UPDATE agr_orthologs SET confidence=?, is_best_score=?, is_best_rev_score=?, last_update_date=SYSDATE
+                WHERE gene_rgd_id_1=? AND gene_rgd_id_2=? AND methods_matched=?
+                  AND ROWNUM<2
+                """;
+            xdbIdDAO.update(sql, confidence, bestScore, bestRevScore, rgdId1, rgdId2, methodsMatched);
+            return 0;
+        }
+    }
+
+    public int logStaleAgrOrthologs(Date cutoffDate) throws Exception {
+        String sql = "SELECT * FROM agr_orthologs WHERE last_update_date<?";
+        MappingSqlQuery q = new MappingSqlQuery(xdbIdDAO.getDataSource(), sql) {
+            @Override
+            protected Object mapRow(ResultSet rs, int rowNum) throws SQLException {
+                int geneRgdId1 = rs.getInt("gene_rgd_id_1");
+                int geneRgdId2 = rs.getInt("gene_rgd_id_2");
+                String conf = rs.getString("confidence");
+                String isBest = rs.getString("is_best_score");
+                String isBestRev = rs.getString("is_best_rev_score");
+                String methodsMatched = rs.getString("methods_matched");
+                Date createdDate = rs.getTimestamp("created_date");
+                Date lastUpdateDate = rs.getTimestamp("last_update_date");
+                logDeletedAgrOrthologs.debug("RGD1:"+geneRgdId1+"|RGD2:"+geneRgdId2+"|"+conf+
+                    "|IS_BEST:"+isBest+"|IS_BEST_REV:"+isBestRev+"|METHODS_MATCHED:"+methodsMatched+
+                    "|CREATED:"+createdDate+"|LAST_UPDATED:"+lastUpdateDate);
+                return null;
+            }
+        };
+        q.declareParameter(new SqlParameter(Types.TIMESTAMP));
+        q.compile();
+        return q.execute(cutoffDate).size();
+    }
+
+    public int deleteStaleAgrOrthologs(Date cutoffDate) throws Exception {
+        return xdbIdDAO.update("DELETE FROM agr_orthologs WHERE last_update_date<?", cutoffDate);
     }
 
     public void setDirectOrthologTypeKey(int directOrthologTypeKey) {

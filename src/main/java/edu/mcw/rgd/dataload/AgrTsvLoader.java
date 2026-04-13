@@ -1,7 +1,5 @@
 package edu.mcw.rgd.dataload;
 
-import edu.mcw.rgd.dao.impl.GeneDAO;
-import edu.mcw.rgd.dao.impl.XdbIdDAO;
 import edu.mcw.rgd.datamodel.Gene;
 import edu.mcw.rgd.datamodel.SpeciesType;
 import edu.mcw.rgd.datamodel.XdbId;
@@ -10,14 +8,9 @@ import edu.mcw.rgd.process.FileDownloader;
 import edu.mcw.rgd.process.Utils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.springframework.jdbc.core.SqlParameter;
-import org.springframework.jdbc.object.MappingSqlQuery;
 
 import java.io.BufferedReader;
 import java.nio.charset.StandardCharsets;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Types;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -26,12 +19,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class AgrTsvLoader {
 
-    XdbIdDAO xdao = new XdbIdDAO();
     OrthologRelationDao dao = new OrthologRelationDao();
 
     Logger log = LogManager.getLogger("agrStatus");
-    Logger logDel = LogManager.getLogger("deletedAgrOrthologs");
-    Logger logIns = LogManager.getLogger("insertedAgrOrthologs");
 
     private String allianceFile;
     private String obsoleteOrthologsDeleteThreshold;
@@ -60,7 +50,7 @@ public class AgrTsvLoader {
         //  we use the as the cutoff timestamp the machine timestamp minus one hour
         Date time0 = Utils.addHoursToDate(new Date(), -1); // time0 = current day-and-time less 1 hour
 
-        int initialOrthologCount = getOrthologCount();
+        int initialOrthologCount = dao.getAgrOrthologCount();
         log.info("initial ortholog count: "+initialOrthologCount);
 
         allianceIdToGeneRgdIdMap = dao.getAllianceIdToGeneRgdIdMap();
@@ -187,7 +177,7 @@ public class AgrTsvLoader {
 
                         String confidence = "stringent";
 
-                        int r = updateDb(g1RgdId, g2RgdId, confidence, isBestScore, isBestRevScore, d.algorithms);
+                        int r = dao.upsertAgrOrtholog(g1RgdId, g2RgdId, confidence, isBestScore, isBestRevScore, d.algorithms);
                         if (r == 1) {
                             inserted.incrementAndGet();
                         } else {
@@ -283,32 +273,11 @@ public class AgrTsvLoader {
     void wrapUp(Date time0, int initialOrthologCount, Set<Integer> curieAccXdbKeys) throws Exception {
 
         // delete stale orthologs
-        int orthologCount = getOrthologCount();
+        int orthologCount = dao.getAgrOrthologCount();
         log.info("current ortholog count: "+orthologCount);
 
-        String sql = "SELECT * FROM agr_orthologs WHERE last_update_date<?";
-        MappingSqlQuery q = new MappingSqlQuery(xdao.getDataSource(), sql) {
-            @Override
-            protected Object mapRow(ResultSet rs, int rowNum) throws SQLException {
-                int geneRgdId1 = rs.getInt("gene_rgd_id_1");
-                int geneRgdId2 = rs.getInt("gene_rgd_id_2");
-                String conf = rs.getString("confidence");
-                String isBest = rs.getString("is_best_score");
-                String isBestRev = rs.getString("is_best_rev_score");
-                String methodsMatched = rs.getString("methods_matched");
-                Date createdDate = rs.getTimestamp("created_date");
-                Date lastUpdateDate = rs.getTimestamp("last_update_date");
-
-                logDel.debug("RGD1:"+geneRgdId1+"|RGD2:"+geneRgdId2+"|"+conf+
-                    "|IS_BEST:"+isBest+"|IS_BEST_REV:"+isBestRev+"|METHODS_MATCHED:"+methodsMatched+
-                    "|CREATED:"+createdDate+"|LAST_UPDATED:"+lastUpdateDate);
-                return null;
-            }
-        };
-        q.declareParameter(new SqlParameter(Types.TIMESTAMP));
-        q.compile();
-        List staleOrthologs = q.execute(time0);
-        log.info(" stale ortholog count: "+staleOrthologs.size());
+        int staleOrthologCount = dao.logStaleAgrOrthologs(time0);
+        log.info(" stale ortholog count: "+staleOrthologCount);
 
         // convert delete-threshold-in-percent to a number
         int maxObsoleteOrthologsToBeDeleted;
@@ -319,25 +288,19 @@ public class AgrTsvLoader {
             maxObsoleteOrthologsToBeDeleted = Integer.parseInt(obsoleteOrthologsDeleteThreshold);
         }
 
-        int newOrthologCount = orthologCount - staleOrthologs.size();
+        int newOrthologCount = orthologCount - staleOrthologCount;
         if( Math.abs(newOrthologCount-initialOrthologCount) > maxObsoleteOrthologsToBeDeleted ) {
             log.warn("*** WARN *** Cannot delete more than "+obsoleteOrthologsDeleteThreshold+" ("+maxObsoleteOrthologsToBeDeleted+") of orthologs!");
         } else {
-            sql = "DELETE FROM agr_orthologs WHERE last_update_date<?";
-            int staleRowsDeleted = xdao.update(sql, time0);
+            int staleRowsDeleted = dao.deleteStaleAgrOrthologs(time0);
             log.info("stale rows deleted from AGR_ORTHOLOGS: " + staleRowsDeleted);
         }
 
-        orthologCount = getOrthologCount();
+        orthologCount = dao.getAgrOrthologCount();
         log.info("final ortholog count: "+orthologCount);
 
         // QC AGR_GENE  curies
         dao.qcCuries(time0, curieAccXdbKeys, log);
-    }
-
-    int getOrthologCount() throws Exception {
-        String sql = "SELECT COUNT(0) FROM agr_orthologs";
-        return xdao.getCount(sql);
     }
 
     synchronized int resolveGene(int speciesTypeKey, String geneSymbol, String geneId, CounterPool counters) throws Exception {
@@ -439,13 +402,13 @@ public class AgrTsvLoader {
 
         if( speciesTypeKey==SpeciesType.HUMAN ) {
 
-            List<Gene> genes = new XdbIdDAO().getActiveGenesByXdbId(63, geneId);
+            List<Gene> genes = dao.getGenesByXdbId(geneId, OrthologRelationDao.XDB_KEY_AGR_GENE);
             for( Gene g: genes ) {
                 if( !Utils.stringsAreEqualIgnoreCase(g.getSymbol(), geneSymbol) ) {
 
                     if( !Utils.stringsAreEqualIgnoreCase(g.getEnsemblGeneSymbol(), geneSymbol) ) {
-                        System.out.println("WARNING! Alliance gene-id " + geneId + " points to gene RGD:" + g.getRgdId() + " [" + g.getSymbol() + "]");
-                        System.out.println("    Alliance had gene symbol [" + geneSymbol + "]");
+                        log.warn("WARNING! Alliance gene-id " + geneId + " points to gene RGD:" + g.getRgdId() + " [" + g.getSymbol() + "]");
+                        log.warn("    Alliance had gene symbol [" + geneSymbol + "]");
                         issueCount++;
                     } else {
                         counters.increment("Alliance matches by Ensembl gene symbol");
@@ -453,13 +416,13 @@ public class AgrTsvLoader {
                 }
             }
 
-            Gene g = new GeneDAO().getGene(geneRgdId);
-            {
+            Gene g = dao.getGeneByRgdId(geneRgdId);
+            if( g!=null ) {
                 if( !Utils.stringsAreEqualIgnoreCase(g.getSymbol(), geneSymbol) ) {
 
                     if( !Utils.stringsAreEqualIgnoreCase(g.getEnsemblGeneSymbol(), geneSymbol) ) {
-                        System.out.println("WARNING! Matching gene RGD:" + g.getRgdId() + " [" + g.getSymbol() + "]");
-                        System.out.println("    Alliance had gene symbol [" + geneSymbol + "]");
+                        log.warn("WARNING! Matching gene RGD:" + g.getRgdId() + " [" + g.getSymbol() + "]");
+                        log.warn("    Alliance had gene symbol [" + geneSymbol + "]");
                         issueCount++;
                     } else {
                         counters.increment("Alliance matches by Ensembl gene symbol");
@@ -469,36 +432,6 @@ public class AgrTsvLoader {
         }
 
         return issueCount;
-    }
-
-    int updateDb(int rgdId1, int rgdId2, String confidence, boolean isBestScore, boolean isBestRevScore, String methodsMatched) throws Exception {
-
-        String bestScore = isBestScore?"Y":"N";
-        String bestRevScore = isBestRevScore?"Y":"N";
-
-        String sql1 = "SELECT COUNT(0) FROM agr_orthologs WHERE gene_rgd_id_1=? AND gene_rgd_id_2=? AND methods_matched=?";
-        int dataExists = xdao.getCount(sql1, rgdId1, rgdId2, methodsMatched);
-        if( dataExists==0 ) {
-            // insert
-            final String sql = "INSERT INTO agr_orthologs (gene_rgd_id_1, gene_rgd_id_2, confidence, is_best_score, "+
-                    "is_best_rev_score, methods_matched, last_update_date) "+
-                    "VALUES(?,?,?,?,?,?,SYSDATE)";
-            xdao.update(sql, rgdId1, rgdId2, confidence, bestScore, bestRevScore, methodsMatched);
-
-            logIns.debug("RGD1:"+rgdId1+"|RGD2:"+rgdId2+"|"+confidence+
-                    "|IS_BEST:"+bestScore+"|IS_BEST_REV:"+bestRevScore+"|METHODS_MATCHED:"+methodsMatched);
-            return 1;
-        } else{
-            // update only one row with the condition mentioned, to avoid duplicates
-            final String sql = """
-                UPDATE agr_orthologs SET confidence=?, is_best_score=?, is_best_rev_score=?, last_update_date=SYSDATE
-                WHERE gene_rgd_id_1=? AND gene_rgd_id_2=? AND methods_matched=?
-                  AND ROWNUM<2
-                """;
-
-            xdao.update(sql, confidence, bestScore, bestRevScore, rgdId1, rgdId2, methodsMatched);
-            return 0;
-        }
     }
 
     String parseSymbol( String s ) {
