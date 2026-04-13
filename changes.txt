@@ -2,6 +2,10 @@ TODO: generate rat_genes_without_orthologs file
 TODO: generate multi ortholog assignment for rat
 TODO: logRgd -- inacurate, must be species-specific
 
+Apr 13, 2026
+  added MemoryMonitor; updated dependencies
+  removed AgrLoader (replaced by AgrTsvLoader); removed json-simple dependency
+
 Feb 2, 2026
   agr orthologs: added logging of conflicts
   

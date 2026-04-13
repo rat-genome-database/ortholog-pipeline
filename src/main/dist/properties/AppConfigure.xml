@@ -1,7 +1,7 @@
 <!DOCTYPE beans PUBLIC "-//SPRING//DTD BEAN//EN" "http://www.springframework.org/dtd/spring-beans.dtd">
 <beans>
 	<bean id="orthologRelationLoadingManager" class="edu.mcw.rgd.dataload.OrthologRelationLoadingManager">
-        <property name="version" value="ortholog-pipeline   -- build Feb 2, 2026"/>
+        <property name="version" value="ortholog-pipeline   -- build Apr 13, 2026"/>
 		<property name="orthologRelationParser" ref="orthologRelationParser"/>
 		<property name="orthologRelationLoader" ref="orthologRelationLoader"/>
 		<property name="rgdLogger" ref="rgdLogger"/>
@@ -44,21 +44,6 @@
 			</set>
 		</property>
     </bean>
-
-	<bean id="agrLoader" class="edu.mcw.rgd.dataload.AgrLoader">
-		<property name="allianceFile" value="https://www.alliancegenome.org/api/homologs/{{TAXON}}?stringencyFilter=stringent&amp;rows={{ROWS_IN_BATCH}}&amp;start="/>
-		<property name="processedSpecies">
-			<set>
-				<value>rat</value>
-				<value>human</value>
-				<value>mouse</value>
-				<value>zebrafish</value>
-				<value>fly</value>
-				<value>roundworm</value>
-				<value>yeast</value>
-			</set>
-		</property>
-	</bean>
 
 	<bean id="agrTsvLoader" class="edu.mcw.rgd.dataload.AgrTsvLoader">
 		<property name="allianceFile" value="https://fms.alliancegenome.org/download/ORTHOLOGY-ALLIANCE_COMBINED.tsv.gz"/>

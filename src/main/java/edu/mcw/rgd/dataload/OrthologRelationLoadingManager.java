@@ -2,6 +2,7 @@ package edu.mcw.rgd.dataload;
 
 import edu.mcw.rgd.datamodel.Gene;
 import edu.mcw.rgd.datamodel.SpeciesType;
+import edu.mcw.rgd.process.MemoryMonitor;
 import edu.mcw.rgd.process.Utils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -55,7 +56,6 @@ public class OrthologRelationLoadingManager {
         boolean fixXrefDataSet = false;
         boolean agrOrthologs = false;
         boolean runForAllSpecies = false;
-        String format = null;
 
         for( int i=0; i<args.length; i++ ) {
             switch (args[i]) {
@@ -68,23 +68,17 @@ public class OrthologRelationLoadingManager {
                     speciesTypeKey = SpeciesType.parse(species);
                 }
                 case "--agrOrthologs" -> agrOrthologs = true;
-                case "--format=api" -> // parameter for agrOrthologs
-                        format = "api";
-                case "--format=tsv" -> // parameter for agrOrthologs
-                        format = "tsv";
             }
         }
+
+        MemoryMonitor memoryMonitor = new MemoryMonitor();
+        memoryMonitor.start();
 
         // run the instance
         try {
             if( agrOrthologs ) {
-                if( Utils.stringsAreEqualIgnoreCase(format, "api") ) {
-                    AgrLoader agrLoader = (AgrLoader) (bf.getBean("agrLoader"));
-                    agrLoader.run();
-                } else {
-                    AgrTsvLoader agrLoader = (AgrTsvLoader) (bf.getBean("agrTsvLoader"));
-                    agrLoader.run();
-                }
+                AgrTsvLoader agrLoader = (AgrTsvLoader) (bf.getBean("agrTsvLoader"));
+                agrLoader.run();
                 return;
             }
 
@@ -114,6 +108,9 @@ public class OrthologRelationLoadingManager {
         catch( Exception e ) {
             Utils.printStackTrace(e, _instance.process);
             throw e;
+        } finally {
+            memoryMonitor.stop();
+            _instance.status.info(memoryMonitor.getSummary());
         }
     }
         
