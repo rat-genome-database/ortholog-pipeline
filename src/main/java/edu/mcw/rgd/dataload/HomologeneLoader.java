@@ -3,7 +3,7 @@ package edu.mcw.rgd.dataload;
 import edu.mcw.rgd.datamodel.Ortholog;
 import edu.mcw.rgd.datamodel.SpeciesType;
 import edu.mcw.rgd.datamodel.Gene;
-import edu.mcw.rgd.process.FileDownloader;
+import edu.mcw.rgd.process.FileDownloader2;
 import edu.mcw.rgd.process.sync.AssociationSyncer;
 
 import java.io.BufferedReader;
@@ -55,7 +55,7 @@ public class HomologeneLoader {
 
     String downloadSourceFile() throws Exception {
 
-        FileDownloader downloader = new FileDownloader();
+        FileDownloader2 downloader = new FileDownloader2();
         downloader.setExternalFile("ftp://ftp.ncbi.nih.gov/pub/HomoloGene/current/homologene.data");
         downloader.setAppendDateStamp(true);
         downloader.setLocalFile("data/homologene.data");

@@ -1,7 +1,7 @@
 package edu.mcw.rgd.dataload;
 
 import edu.mcw.rgd.datamodel.SpeciesType;
-import edu.mcw.rgd.process.FileDownloader;
+import edu.mcw.rgd.process.FileDownloader2;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -11,7 +11,7 @@ import java.util.Set;
  * download a file from external ftp site and store a local copy of that file
  * <p> depending on the species, the source file is either downloaded from HGNC HCOP, or from NCBI
  */
-public class OrthologRelationFile extends FileDownloader {
+public class OrthologRelationFile extends FileDownloader2 {
 
     protected final Logger processLog = LogManager.getLogger("process");
 
