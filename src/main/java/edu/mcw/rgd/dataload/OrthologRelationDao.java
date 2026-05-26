@@ -158,8 +158,16 @@ public class OrthologRelationDao {
         }
     }
 
-    // methodCounters - array of how many times given best-fit method was used
+    // comparator used by getKeyForMatchingOrtholog to break ties between an existing in-DB row
+    // and an incoming candidate (or among multiple in-DB rows for the same src+destSpecies).
+    // Order: source priority (RGD > Alliance > HGNC > NCBI), then evidence count, then symbol heuristics.
     int compareOrthologs(Ortholog o1, Ortholog o2) {
+
+        // pick ortholog with higher-priority data source
+        int p1 = sourcePriority(o1.getXrefDataSrc());
+        int p2 = sourcePriority(o2.getXrefDataSrc());
+        if( p1 != p2 )
+            return p2 - p1;
 
         // pick ortholog with longest evidence
         int ev1count = getEvidenceCount(o1);
@@ -783,16 +791,29 @@ public class OrthologRelationDao {
         return associationDAO.getAssociationCountByType(assocType, masterSpeciesTypeKey, detailSpeciesTypeKey);
     }
 
+    /// for each (src_rgd_id, dest_rgd_id) pair with multiple rows in genetogene_rgd_id_rlt,
+    /// keep the highest-priority row (RGD > Alliance > HGNC > NCBI) and delete the rest,
+    /// but only delete rows owned by this pipeline (created_by=orthologPipelineId).
+    /// Rows owned by curators or other pipelines are never touched.
     public int deleteDuplicateNonManualOrthologs( int orthologPipelineId ) throws Exception {
 
-        // o1 - manual orthologs: orthologs enforced by RGD curators
-        // o2 - orthologs created by this pipeline
         String sql = """
             DELETE FROM genetogene_rgd_id_rlt WHERE genetogene_key IN(
-              SELECT o2.genetogene_key FROM  genetogene_rgd_id_rlt o1,genetogene_rgd_id_rlt o2
-              WHERE o1.genetogene_key<>o2.genetogene_key AND o1.src_rgd_id=o2.src_rgd_id AND o1.dest_rgd_id=o2.dest_rgd_id
-                AND o1.xref_data_src='RGD' AND o2.xref_data_src<>'RGD'
-            ) AND created_by=?
+              SELECT genetogene_key FROM (
+                SELECT genetogene_key, created_by,
+                       ROW_NUMBER() OVER (
+                         PARTITION BY src_rgd_id, dest_rgd_id
+                         ORDER BY CASE xref_data_src
+                           WHEN 'RGD' THEN 4
+                           WHEN 'Alliance' THEN 3
+                           WHEN 'HGNC' THEN 2
+                           WHEN 'NCBI' THEN 1
+                           ELSE 0
+                         END DESC, genetogene_key ASC
+                       ) AS rn
+                FROM genetogene_rgd_id_rlt
+              ) WHERE rn > 1 AND created_by = ?
+            )
             """;
         return orthologDAO.update(sql, orthologPipelineId);
     }
@@ -853,6 +874,91 @@ public class OrthologRelationDao {
 
     public int deleteStaleAgrOrthologs(Date cutoffDate) throws Exception {
         return xdbIdDAO.update("DELETE FROM agr_orthologs WHERE last_update_date<?", cutoffDate);
+    }
+
+    // priority for the strong-ortholog cascade: higher value wins
+    // RGD = manual orthologs (curated), Alliance = AGR mutual-best, HGNC = HCOP, NCBI = NCBI gene_orthologs
+    public static int sourcePriority(String xrefDataSrc) {
+        if( xrefDataSrc==null ) return 0;
+        switch( xrefDataSrc ) {
+            case "RGD":      return 4;
+            case "Alliance": return 3;
+            case "HGNC":     return 2;
+            case "NCBI":     return 1;
+            default:         return 0;
+        }
+    }
+
+    /**
+     * get Alliance orthologs (from AGR_ORTHOLOGS) for given source rgd id and destination species.
+     * Restricted to rows flagged as mutual best hits (is_best_score='Y' AND is_best_rev_score='Y').
+     * Returns synthetic Ortholog objects with XREF_DATA_SRC='Alliance' and XREF_DATA_SET=methods_matched;
+     * no key/createdBy/dates are populated (the caller fills those in).
+     */
+    public List<Ortholog> getAllianceOrthologs(int srcRgdId, int destSpeciesTypeKey) throws Exception {
+        // Look in both directions: srcRgdId may be stored as either gene_rgd_id_1 or gene_rgd_id_2.
+        String sql = """
+            SELECT ao.gene_rgd_id_2 AS partner_rgd_id, ao.methods_matched
+              FROM agr_orthologs ao, genes g
+             WHERE ao.gene_rgd_id_1 = ?
+               AND g.rgd_id = ao.gene_rgd_id_2
+               AND g.species_type_key = ?
+               AND ao.is_best_score = 'Y' AND ao.is_best_rev_score = 'Y'
+            UNION ALL
+            SELECT ao.gene_rgd_id_1 AS partner_rgd_id, ao.methods_matched
+              FROM agr_orthologs ao, genes g
+             WHERE ao.gene_rgd_id_2 = ?
+               AND g.rgd_id = ao.gene_rgd_id_1
+               AND g.species_type_key = ?
+               AND ao.is_best_score = 'Y' AND ao.is_best_rev_score = 'Y'
+            """;
+
+        int srcSpeciesTypeKey = 0;
+        try {
+            Gene srcGene = geneDAO.getGene(srcRgdId);
+            if( srcGene!=null ) srcSpeciesTypeKey = srcGene.getSpeciesTypeKey();
+        } catch( Exception ignore ) {}
+        final int srcSpKey = srcSpeciesTypeKey;
+        final int dstSpKey = destSpeciesTypeKey;
+        final int src = srcRgdId;
+
+        MappingSqlQuery q = new MappingSqlQuery(xdbIdDAO.getDataSource(), sql) {
+            @Override
+            protected Object mapRow(ResultSet rs, int rowNum) throws SQLException {
+                Ortholog o = new Ortholog();
+                o.setSrcRgdId(src);
+                o.setDestRgdId(rs.getInt("partner_rgd_id"));
+                o.setSrcSpeciesTypeKey(srcSpKey);
+                o.setDestSpeciesTypeKey(dstSpKey);
+                o.setXrefDataSrc("Alliance");
+                o.setXrefDataSet(rs.getString("methods_matched"));
+                return o;
+            }
+        };
+        q.declareParameter(new SqlParameter(Types.INTEGER));
+        q.declareParameter(new SqlParameter(Types.INTEGER));
+        q.declareParameter(new SqlParameter(Types.INTEGER));
+        q.declareParameter(new SqlParameter(Types.INTEGER));
+        q.compile();
+        @SuppressWarnings("unchecked")
+        List<Ortholog> result = (List<Ortholog>) q.execute(srcRgdId, destSpeciesTypeKey, srcRgdId, destSpeciesTypeKey);
+        return result;
+    }
+
+    /// most recent last_update_date in AGR_ORTHOLOGS, or null if the table is empty;
+    /// used to guard the per-species run against stale Alliance data
+    public Date getAllianceMaxLastUpdateDate() throws Exception {
+        String sql = "SELECT MAX(last_update_date) AS max_date FROM agr_orthologs";
+        MappingSqlQuery q = new MappingSqlQuery(xdbIdDAO.getDataSource(), sql) {
+            @Override
+            protected Object mapRow(ResultSet rs, int rowNum) throws SQLException {
+                return rs.getTimestamp("max_date");
+            }
+        };
+        q.compile();
+        @SuppressWarnings("unchecked")
+        List<Date> rows = (List<Date>) q.execute();
+        return rows.isEmpty() ? null : rows.get(0);
     }
 
     public void setDirectOrthologTypeKey(int directOrthologTypeKey) {

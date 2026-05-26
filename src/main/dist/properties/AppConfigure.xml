@@ -6,6 +6,8 @@
 		<property name="orthologRelationLoader" ref="orthologRelationLoader"/>
 		<property name="rgdLogger" ref="rgdLogger"/>
         <property name="xrefDataSrc" value="HGNC" />
+        <!-- per-species run aborts if AGR_ORTHOLOGS newest row is older than this many days -->
+        <property name="agrMaxAgeDays" value="60" />
 	</bean>
 	
 	<bean id="orthologRelationLoader" class="edu.mcw.rgd.dataload.OrthologRelationLoader">

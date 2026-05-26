@@ -71,10 +71,11 @@ public class OrthologRelationLoader {
         dropStrongOrthologsFromAssociations(associations);
         processOrthologAssociations(associations, speciesTypeKey);
 
-        // ensure there no duplicate orthologs
+        // ensure there are no duplicate orthologs: for each (src,dest) pair keep the highest-priority row
+        // (RGD > Alliance > HGNC > NCBI); only this pipeline's own rows are eligible for deletion
         int duplicateOrthologsDeleted = dao.deleteDuplicateNonManualOrthologs(getCreatedBy());
         if( duplicateOrthologsDeleted != 0 ) {
-            process.info("CLEANUP: deleted "+duplicateOrthologsDeleted+" orthologs that were the same as existing manual orthologs!");
+            process.info("CLEANUP: deleted "+duplicateOrthologsDeleted+" duplicate orthologs outranked by a higher-priority row for the same (src,dest)");
         }
     }
 
@@ -402,6 +403,7 @@ public class OrthologRelationLoader {
     void qcGroups( Collection<OrthologGroup> groups ) throws Exception {
 
         int[] methodCounters = new int[4];
+        int[] sourceCounters = new int[4]; // manual, Alliance, HCOP, NCBI
         for( OrthologGroup group: groups ) {
 
             // build species-human complementary relations
@@ -414,13 +416,19 @@ public class OrthologRelationLoader {
             // pick an ortholog for every relation group in a species pair
             for( Map.Entry<String, List<OrthologRelation>> entry: speciesMap.entrySet() ) {
                 List<OrthologRelation> relations = entry.getValue();
-                Ortholog ortholog = generateOrtholog(relations, methodCounters);
+                Ortholog ortholog = generateOrtholog(relations, methodCounters, sourceCounters);
                 if( ortholog!=null )
                     group.incomingList.add(ortholog);
             }
         }
 
-        process.info("ORTHOLOG BEST FIT STATS:");
+        process.info("ORTHOLOG SOURCE STATS:");
+        process.info("  bestFitFromManual   " + sourceCounters[0]);
+        process.info("  bestFitFromAlliance " + sourceCounters[1]);
+        process.info("  bestFitFromHCOP     " + sourceCounters[2]);
+        process.info("  bestFitFromNCBI     " + sourceCounters[3]);
+
+        process.info("ORTHOLOG BEST FIT STATS (HCOP/NCBI tie-break methods):");
         process.info("  bestFitOneRel " + methodCounters[0]);
         process.info("  bestFitLongestEvidence " + methodCounters[1]);
         process.info("  bestFitSymbolMatch " + methodCounters[2]);
@@ -443,38 +451,86 @@ public class OrthologRelationLoader {
         return speciesMap;
     }
 
-    Ortholog generateOrtholog(List<OrthologRelation> relations, int[] methodCounters) throws Exception {
+    // strong-ortholog cascade for a (srcRgdId, destSpeciesTypeKey) pair:
+    //   priority 1 -- manual ortholog (XREF_DATA_SRC='RGD')
+    //   priority 2 -- Alliance mutual-best (XREF_DATA_SRC='Alliance', read from AGR_ORTHOLOGS)
+    //   priority 3 -- best-fit among incoming HCOP relations (dataSource='HGNC')
+    //   priority 4 -- best-fit among incoming NCBI relations (dataSource='NCBI')
+    // unpicked relations from any tier fall through to processOrthologAssociations as weak orthologs.
+    Ortholog generateOrtholog(List<OrthologRelation> relations, int[] methodCounters, int[] sourceCounters) throws Exception {
 
         int srcRgdId = relations.get(0).getSrcRgdId();
         int destSpeciesTypeKey = relations.get(0).getDestSpeciesTypeKey();
 
+        // priority 1: manual orthologs always win
         List<Ortholog> manualOrthologs = dao.getManualOrthologs(srcRgdId, destSpeciesTypeKey);
         if( !manualOrthologs.isEmpty() ) {
-            // manual orthologs always take precedence over incoming relations
             if( manualOrthologs.size()>1 ) {
                 process.warn("CONFLICT: multiple manual orthologs for src_rgd_id="+srcRgdId+" and species type key "+destSpeciesTypeKey);
                 return null;
             }
+            sourceCounters[0]++;
             return manualOrthologs.get(0);
         }
 
-        // no manual orthologs present -- pick a best fit relation and remove that relation from relations list
-        OrthologRelation bestFitRel = pickBestFitRelation(relations, methodCounters, dao);
+        // priority 2: Alliance mutual-best
+        List<Ortholog> allianceOrthologs = dao.getAllianceOrthologs(srcRgdId, destSpeciesTypeKey);
+        if( !allianceOrthologs.isEmpty() ) {
+            if( allianceOrthologs.size()>1 ) {
+                process.warn("CONFLICT: multiple Alliance orthologs for src_rgd_id="+srcRgdId+" and species type key "+destSpeciesTypeKey);
+                return null;
+            }
+            sourceCounters[1]++;
+            Ortholog a = allianceOrthologs.get(0);
+            stampAuditFields(a);
+            return a;
+        }
 
-        // turn the relation into an ortholog
+        // priority 3: HCOP (HGNC) relations
+        List<OrthologRelation> hcopRelations = filterByDataSource(relations, "HGNC");
+        if( !hcopRelations.isEmpty() ) {
+            sourceCounters[2]++;
+            return relationToOrtholog(pickBestFitRelation(hcopRelations, methodCounters, dao));
+        }
+
+        // priority 4: NCBI relations
+        List<OrthologRelation> ncbiRelations = filterByDataSource(relations, "NCBI");
+        if( !ncbiRelations.isEmpty() ) {
+            sourceCounters[3]++;
+            return relationToOrtholog(pickBestFitRelation(ncbiRelations, methodCounters, dao));
+        }
+
+        return null;
+    }
+
+    static List<OrthologRelation> filterByDataSource(List<OrthologRelation> relations, String dataSource) {
+        List<OrthologRelation> result = new ArrayList<>(relations.size());
+        for( OrthologRelation rel: relations ) {
+            if( dataSource.equals(rel.getDataSource()) ) {
+                result.add(rel);
+            }
+        }
+        return result;
+    }
+
+    Ortholog relationToOrtholog(OrthologRelation bestFitRel) {
         Ortholog o = new Ortholog();
         o.setXrefDataSrc(bestFitRel.getDataSource());
-        o.setCreatedBy(getCreatedBy());
-        o.setLastModifiedBy(getCreatedBy());
-        o.setCreatedDate(new Date());
-        o.setLastModifiedDate(new Date());
-
         o.setSrcRgdId(bestFitRel.getSrcRgdId());
         o.setDestRgdId(bestFitRel.getDestRgdId());
         o.setXrefDataSet(bestFitRel.getDataSetName());
         o.setSrcSpeciesTypeKey(bestFitRel.getSrcSpeciesTypeKey());
         o.setDestSpeciesTypeKey(bestFitRel.getDestSpeciesTypeKey());
+        stampAuditFields(o);
         return o;
+    }
+
+    void stampAuditFields(Ortholog o) {
+        Date now = new Date();
+        o.setCreatedBy(getCreatedBy());
+        o.setLastModifiedBy(getCreatedBy());
+        o.setCreatedDate(now);
+        o.setLastModifiedDate(now);
     }
 
     // methodCounters - array of how many times given best-fit method was used

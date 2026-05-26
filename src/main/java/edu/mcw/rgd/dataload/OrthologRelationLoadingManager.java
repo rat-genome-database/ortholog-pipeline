@@ -28,6 +28,7 @@ public class OrthologRelationLoadingManager {
     OrthologRelationParser orthologRelationParser;
     OrthologRelationLoader loader;
     private String xrefDataSrc = "HGNC";
+    private int agrMaxAgeDays = 60;
 
     long runTime = 0;
     int countOfRatGenesWithoutOrthologs = 0;
@@ -84,6 +85,7 @@ public class OrthologRelationLoadingManager {
 
             if( runForAllSpecies ) {
 
+                _instance.checkAllianceFreshness();
                 Collection<Integer> speciesInRgd = SpeciesType.getSpeciesTypeKeys();
                 for( int spTypeKey: speciesInRgd ) {
                     if( SpeciesType.isSearchable(spTypeKey) && spTypeKey!=SpeciesType.HUMAN ) {
@@ -102,6 +104,7 @@ public class OrthologRelationLoadingManager {
             if( fixXrefDataSet ) {
                 _instance.fixXrefDataSet();
             } else {
+                _instance.checkAllianceFreshness();
                 _instance.run(speciesTypeKey);
             }
         }
@@ -268,6 +271,30 @@ public class OrthologRelationLoadingManager {
 
     public String getXrefDataSrc() {
         return xrefDataSrc;
+    }
+
+    public void setAgrMaxAgeDays(int agrMaxAgeDays) {
+        this.agrMaxAgeDays = agrMaxAgeDays;
+    }
+
+    public int getAgrMaxAgeDays() {
+        return agrMaxAgeDays;
+    }
+
+    /// fail fast if AGR_ORTHOLOGS is empty or its newest row is older than agrMaxAgeDays --
+    /// the per-species cascade treats Alliance data as priority 2, so a stale or missing AGR
+    /// table would silently drop entire species back to HCOP/NCBI selection
+    void checkAllianceFreshness() throws Exception {
+        Date maxAgrDate = loader.dao.getAllianceMaxLastUpdateDate();
+        if( maxAgrDate==null ) {
+            throw new Exception("AGR_ORTHOLOGS is empty -- run with --agrOrthologs first");
+        }
+        long ageDays = (System.currentTimeMillis() - maxAgrDate.getTime()) / (1000L * 60 * 60 * 24);
+        if( ageDays > agrMaxAgeDays ) {
+            throw new Exception("AGR_ORTHOLOGS is stale: newest last_update_date is "+maxAgrDate
+                    +" ("+ageDays+" days old; threshold "+agrMaxAgeDays+" days) -- re-run with --agrOrthologs first");
+        }
+        status.info("AGR_ORTHOLOGS freshness OK -- newest last_update_date "+maxAgrDate+" ("+ageDays+" days old)");
     }
 
     public void setVersion(String version) {
