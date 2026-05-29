@@ -6,6 +6,7 @@ May 29, 2026
   fixes: NCBI orthologs URL ftp->https; getAllianceOrthologs now joins RGD_IDS for species and dedups bidirectional AGR rows
   Alliance/manual ortholog conflicts now logged to multipleMatch.log (off process.log) with a reported count; silenced per-relation QC debug line
   Alliance orthologs now feed the relation pool as human->species relations (priority Alliance>HCOP>NCBI) so both directions derive from one source
+  added reciprocity filter: only mutually-best orthologs are inserted as strong, eliminating insert-then-downgrade churn (non-reciprocal picks become weak associations up front)
 
 May 26, 2026
   HCOP/NCBI cascade now uses priority order manual > Alliance > HCOP > NCBI; Alliance candidates read from AGR_ORTHOLOGS (mutual-best rows); duplicate cleanup generalized to keep the highest-priority row per (src,dest); per-species run aborts if AGR_ORTHOLOGS is empty or older than agrMaxAgeDays; runAll.sh refreshes AGR first

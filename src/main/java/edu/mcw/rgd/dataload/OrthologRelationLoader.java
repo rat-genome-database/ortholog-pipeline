@@ -70,6 +70,10 @@ public class OrthologRelationLoader {
 
         qcGroups(groups);
 
+        // keep only mutually-best orthologs as strong; drop non-reciprocal picks before insert so they
+        // are not inserted-then-downgraded by checkComplementOrthologs on every run
+        enforceReciprocity(groups);
+
         List<Ortholog> weakOrthologs = loadGroups(groups, speciesTypeKey);
 
         // extract non-orthologous relations and turn them into associations
@@ -442,6 +446,49 @@ public class OrthologRelationLoader {
         process.info("  bestFitLongestEvidence " + methodCounters[1]);
         process.info("  bestFitSymbolMatch " + methodCounters[2]);
         process.info("  bestFitShortestSymbol " + methodCounters[3]);
+    }
+
+    // Reciprocity-aware pre-insert filter. Keep an incoming ortholog A->B as strong only when A's best
+    // candidate points to B AND B's best candidate points back to A (mutual best). Non-reciprocal and
+    // non-winning candidates are removed from the strong-ortholog set here, before insert -- so they are
+    // no longer inserted-then-downgraded by checkComplementOrthologs every run. Their underlying relations
+    // remain in the group, so they still become weak_ortholog associations downstream. Manual (RGD)
+    // orthologs are always kept; checkComplementOrthologs remains the correctness backstop.
+    void enforceReciprocity(Collection<OrthologGroup> groups) {
+
+        // each gene's single best candidate ortholog (where the gene is the source), resolved by priority
+        Map<Integer, Ortholog> winnerBySrc = new HashMap<>();
+        for( OrthologGroup group: groups ) {
+            for( Ortholog o: group.incomingList ) {
+                Ortholog cur = winnerBySrc.get(o.getSrcRgdId());
+                if( cur==null || dao.compareOrthologs(o, cur) < 0 ) {
+                    winnerBySrc.put(o.getSrcRgdId(), o);
+                }
+            }
+        }
+
+        int kept = 0, demoted = 0;
+        for( OrthologGroup group: groups ) {
+            Iterator<Ortholog> it = group.incomingList.iterator();
+            while( it.hasNext() ) {
+                Ortholog o = it.next();
+                // manual orthologs are curated -- never demote them
+                if( Utils.stringsAreEqual(o.getXrefDataSrc(), "RGD") ) {
+                    kept++;
+                    continue;
+                }
+                Ortholog destWinner = winnerBySrc.get(o.getDestRgdId());
+                boolean mutualBest = winnerBySrc.get(o.getSrcRgdId())==o
+                        && destWinner!=null && destWinner.getDestRgdId()==o.getSrcRgdId();
+                if( mutualBest ) {
+                    kept++;
+                } else {
+                    it.remove();
+                    demoted++;
+                }
+            }
+        }
+        process.info("RECIPROCITY FILTER: "+kept+" strong (mutual-best), "+demoted+" demoted to weak (non-reciprocal)");
     }
 
     // extract relations by species pairs
