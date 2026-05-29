@@ -899,17 +899,17 @@ public class OrthologRelationDao {
         // Look in both directions: srcRgdId may be stored as either gene_rgd_id_1 or gene_rgd_id_2.
         String sql = """
             SELECT ao.gene_rgd_id_2 AS partner_rgd_id, ao.methods_matched
-              FROM agr_orthologs ao, genes g
+              FROM agr_orthologs ao, rgd_ids r
              WHERE ao.gene_rgd_id_1 = ?
-               AND g.rgd_id = ao.gene_rgd_id_2
-               AND g.species_type_key = ?
+               AND r.rgd_id = ao.gene_rgd_id_2
+               AND r.species_type_key = ?
                AND ao.is_best_score = 'Y' AND ao.is_best_rev_score = 'Y'
             UNION ALL
             SELECT ao.gene_rgd_id_1 AS partner_rgd_id, ao.methods_matched
-              FROM agr_orthologs ao, genes g
+              FROM agr_orthologs ao, rgd_ids r
              WHERE ao.gene_rgd_id_2 = ?
-               AND g.rgd_id = ao.gene_rgd_id_1
-               AND g.species_type_key = ?
+               AND r.rgd_id = ao.gene_rgd_id_1
+               AND r.species_type_key = ?
                AND ao.is_best_score = 'Y' AND ao.is_best_rev_score = 'Y'
             """;
 

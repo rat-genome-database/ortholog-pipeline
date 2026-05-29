@@ -3,6 +3,7 @@ TODO: generate multi ortholog assignment for rat
 TODO: logRgd -- inacurate, must be species-specific
 
 May 29, 2026
+  fixed getAllianceOrthologs query: species filter joins RGD_IDS (GENES has no species_type_key column)
   fixed NCBI gene_orthologs URL: ftp:// -> https:// (FileDownloader2 has no FTP support)
 
 May 26, 2026
