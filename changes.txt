@@ -2,6 +2,9 @@ TODO: generate rat_genes_without_orthologs file
 TODO: generate multi ortholog assignment for rat
 TODO: logRgd -- inacurate, must be species-specific
 
+May 29, 2026
+  fixed NCBI gene_orthologs URL: ftp:// -> https:// (FileDownloader2 has no FTP support)
+
 May 26, 2026
   HCOP/NCBI cascade now uses priority order manual > Alliance > HCOP > NCBI; Alliance candidates read from AGR_ORTHOLOGS (mutual-best rows); duplicate cleanup generalized to keep the highest-priority row per (src,dest); per-species run aborts if AGR_ORTHOLOGS is empty or older than agrMaxAgeDays; runAll.sh refreshes AGR first
   switched to FileDownloader2 (JDK HttpClient); dropped commons-net and apache httpclient deps; updated dependencies

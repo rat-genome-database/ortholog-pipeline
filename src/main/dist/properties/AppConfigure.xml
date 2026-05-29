@@ -1,7 +1,7 @@
 <!DOCTYPE beans PUBLIC "-//SPRING//DTD BEAN//EN" "http://www.springframework.org/dtd/spring-beans.dtd">
 <beans>
 	<bean id="orthologRelationLoadingManager" class="edu.mcw.rgd.dataload.OrthologRelationLoadingManager">
-        <property name="version" value="ortholog-pipeline   -- build May 26, 2026"/>
+        <property name="version" value="ortholog-pipeline   -- build May 29, 2026"/>
 		<property name="orthologRelationParser" ref="orthologRelationParser"/>
 		<property name="orthologRelationLoader" ref="orthologRelationLoader"/>
 		<property name="rgdLogger" ref="rgdLogger"/>
@@ -31,7 +31,7 @@
 
     <bean id="orthologRelationFile" class="edu.mcw.rgd.dataload.OrthologRelationFile">
         <property name="externalHcopFile" value="https://storage.googleapis.com/public-download-files/hcop/human_all_hcop_sixteen_column.txt.gz"/>
-		<property name="externalNcbiFile" value="ftp://ftp.ncbi.nih.gov/gene/DATA/gene_orthologs.gz"/>
+		<property name="externalNcbiFile" value="https://ftp.ncbi.nlm.nih.gov/gene/DATA/gene_orthologs.gz"/>
         <property name="localHcopFile" value="data/hgnc.data"/>
 		<property name="localNcbiFile" value="data/ncbi.data"/>
         <property name="appendDateStamp" value="true"/>

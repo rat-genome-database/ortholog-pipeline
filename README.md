@@ -28,7 +28,7 @@ Before any per-species work, the manager calls `checkAllianceFreshness()`: the r
 
 ### 1. Download and parse (`OrthologRelationFile`, `OrthologRelationParser`)
 
-- If the species is in the HCOP set (Human, Rat, Mouse, Dog, Pig), the HCOP file is downloaded **first** (`https://storage.googleapis.com/.../human_all_hcop_sixteen_column.txt.gz` &rarr; `data/hgnc.data`), parsed and filtered down to relations between human and the target species, then the NCBI file is downloaded (`ftp://ftp.ncbi.nih.gov/gene/DATA/gene_orthologs.gz` &rarr; `data/ncbi.data`) and its relations are appended. For non-HCOP species only the NCBI file is read.
+- If the species is in the HCOP set (Human, Rat, Mouse, Dog, Pig), the HCOP file is downloaded **first** (`https://storage.googleapis.com/.../human_all_hcop_sixteen_column.txt.gz` &rarr; `data/hgnc.data`), parsed and filtered down to relations between human and the target species, then the NCBI file is downloaded (`https://ftp.ncbi.nlm.nih.gov/gene/DATA/gene_orthologs.gz` &rarr; `data/ncbi.data`) and its relations are appended. For non-HCOP species only the NCBI file is read.
 - Files are kept gzip-compressed; previous downloads are kept under date-stamped backup names.
 - A sanity check throws if fewer than 5,000 human/species relations come out of the parse.
 - Each surviving line becomes an `OrthologRelation` (src/dest EntrezGene IDs, species keys, source name &mdash; `HGNC` or `NCBI` &mdash; and a dataset/evidence string).
@@ -125,7 +125,7 @@ Spring beans:
 - `orthologRelationDao` &mdash; `directOrthologTypeKey=11`, `transitiveOrthologTypeKey=13`
 - `orthologRelationFile` &mdash;
   - HCOP source: `https://storage.googleapis.com/public-download-files/hcop/human_all_hcop_sixteen_column.txt.gz` &rarr; `data/hgnc.data`
-  - NCBI source: `ftp://ftp.ncbi.nih.gov/gene/DATA/gene_orthologs.gz` &rarr; `data/ncbi.data`
+  - NCBI source: `https://ftp.ncbi.nlm.nih.gov/gene/DATA/gene_orthologs.gz` &rarr; `data/ncbi.data`
   - HCOP species: Human, Rat, Mouse, Dog, Pig (everything else goes through NCBI)
 - `agrTsvLoader` &mdash;
   - Source: `https://fms.alliancegenome.org/download/ORTHOLOGY-ALLIANCE_COMBINED.tsv.gz`
