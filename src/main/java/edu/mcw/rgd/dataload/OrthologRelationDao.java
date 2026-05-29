@@ -897,20 +897,25 @@ public class OrthologRelationDao {
      */
     public List<Ortholog> getAllianceOrthologs(int srcRgdId, int destSpeciesTypeKey) throws Exception {
         // Look in both directions: srcRgdId may be stored as either gene_rgd_id_1 or gene_rgd_id_2.
+        // AGR_ORTHOLOGS stores every pair in BOTH directions, so the bidirectional UNION returns the
+        // same partner twice for a genuine 1:1 ortholog; GROUP BY collapses those duplicates so that
+        // size>1 means a true multi-partner conflict, not just the mirrored row.
         String sql = """
-            SELECT ao.gene_rgd_id_2 AS partner_rgd_id, ao.methods_matched
-              FROM agr_orthologs ao, rgd_ids r
-             WHERE ao.gene_rgd_id_1 = ?
-               AND r.rgd_id = ao.gene_rgd_id_2
-               AND r.species_type_key = ?
-               AND ao.is_best_score = 'Y' AND ao.is_best_rev_score = 'Y'
-            UNION ALL
-            SELECT ao.gene_rgd_id_1 AS partner_rgd_id, ao.methods_matched
-              FROM agr_orthologs ao, rgd_ids r
-             WHERE ao.gene_rgd_id_2 = ?
-               AND r.rgd_id = ao.gene_rgd_id_1
-               AND r.species_type_key = ?
-               AND ao.is_best_score = 'Y' AND ao.is_best_rev_score = 'Y'
+            SELECT partner_rgd_id, MAX(methods_matched) AS methods_matched FROM (
+                SELECT ao.gene_rgd_id_2 AS partner_rgd_id, ao.methods_matched
+                  FROM agr_orthologs ao, rgd_ids r
+                 WHERE ao.gene_rgd_id_1 = ?
+                   AND r.rgd_id = ao.gene_rgd_id_2
+                   AND r.species_type_key = ?
+                   AND ao.is_best_score = 'Y' AND ao.is_best_rev_score = 'Y'
+                UNION ALL
+                SELECT ao.gene_rgd_id_1 AS partner_rgd_id, ao.methods_matched
+                  FROM agr_orthologs ao, rgd_ids r
+                 WHERE ao.gene_rgd_id_2 = ?
+                   AND r.rgd_id = ao.gene_rgd_id_1
+                   AND r.species_type_key = ?
+                   AND ao.is_best_score = 'Y' AND ao.is_best_rev_score = 'Y'
+            ) GROUP BY partner_rgd_id
             """;
 
         int srcSpeciesTypeKey = 0;
