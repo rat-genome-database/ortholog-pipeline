@@ -890,54 +890,42 @@ public class OrthologRelationDao {
     }
 
     /**
-     * get Alliance orthologs (from AGR_ORTHOLOGS) for given source rgd id and destination species.
-     * Restricted to rows flagged as mutual best hits (is_best_score='Y' AND is_best_rev_score='Y').
-     * Returns synthetic Ortholog objects with XREF_DATA_SRC='Alliance' and XREF_DATA_SET=methods_matched;
-     * no key/createdBy/dates are populated (the caller fills those in).
+     * Load Alliance (AGR_ORTHOLOGS) mutual-best human&lt;-&gt;species pairs as human-&gt;species OrthologRelations,
+     * tagged dataSource='Alliance' with dataSetName=methods_matched. These are merged into the same
+     * relation pool as HCOP/NCBI so the loader derives both directions from the same source (reciprocal
+     * by construction via buildComplementaryRelations), instead of resolving each direction independently.
+     * Only is_best_score='Y' AND is_best_rev_score='Y' rows are used. RGD ids are already resolved.
      */
-    public List<Ortholog> getAllianceOrthologs(int srcRgdId, int destSpeciesTypeKey) throws Exception {
-        // Look in both directions: srcRgdId may be stored as either gene_rgd_id_1 or gene_rgd_id_2.
-        // AGR_ORTHOLOGS stores every pair in BOTH directions, so the bidirectional UNION returns the
-        // same partner twice for a genuine 1:1 ortholog; GROUP BY collapses those duplicates so that
-        // size>1 means a true multi-partner conflict, not just the mirrored row.
+    public List<OrthologRelation> getAllianceRelations(int speciesTypeKey) throws Exception {
+        // AGR_ORTHOLOGS stores both directions; collapse to one (human, species) pair per ortholog
         String sql = """
-            SELECT partner_rgd_id, MAX(methods_matched) AS methods_matched FROM (
-                SELECT ao.gene_rgd_id_2 AS partner_rgd_id, ao.methods_matched
-                  FROM agr_orthologs ao, rgd_ids r
-                 WHERE ao.gene_rgd_id_1 = ?
-                   AND r.rgd_id = ao.gene_rgd_id_2
-                   AND r.species_type_key = ?
+            SELECT human_rgd, species_rgd, MAX(methods_matched) AS methods_matched FROM (
+                SELECT ao.gene_rgd_id_1 AS human_rgd, ao.gene_rgd_id_2 AS species_rgd, ao.methods_matched
+                  FROM agr_orthologs ao, rgd_ids h, rgd_ids s
+                 WHERE h.rgd_id = ao.gene_rgd_id_1 AND h.species_type_key = ?
+                   AND s.rgd_id = ao.gene_rgd_id_2 AND s.species_type_key = ?
                    AND ao.is_best_score = 'Y' AND ao.is_best_rev_score = 'Y'
                 UNION ALL
-                SELECT ao.gene_rgd_id_1 AS partner_rgd_id, ao.methods_matched
-                  FROM agr_orthologs ao, rgd_ids r
-                 WHERE ao.gene_rgd_id_2 = ?
-                   AND r.rgd_id = ao.gene_rgd_id_1
-                   AND r.species_type_key = ?
+                SELECT ao.gene_rgd_id_2 AS human_rgd, ao.gene_rgd_id_1 AS species_rgd, ao.methods_matched
+                  FROM agr_orthologs ao, rgd_ids h, rgd_ids s
+                 WHERE h.rgd_id = ao.gene_rgd_id_2 AND h.species_type_key = ?
+                   AND s.rgd_id = ao.gene_rgd_id_1 AND s.species_type_key = ?
                    AND ao.is_best_score = 'Y' AND ao.is_best_rev_score = 'Y'
-            ) GROUP BY partner_rgd_id
+            ) GROUP BY human_rgd, species_rgd
             """;
 
-        int srcSpeciesTypeKey = 0;
-        try {
-            Gene srcGene = geneDAO.getGene(srcRgdId);
-            if( srcGene!=null ) srcSpeciesTypeKey = srcGene.getSpeciesTypeKey();
-        } catch( Exception ignore ) {}
-        final int srcSpKey = srcSpeciesTypeKey;
-        final int dstSpKey = destSpeciesTypeKey;
-        final int src = srcRgdId;
-
+        final int destSpKey = speciesTypeKey;
         MappingSqlQuery q = new MappingSqlQuery(xdbIdDAO.getDataSource(), sql) {
             @Override
             protected Object mapRow(ResultSet rs, int rowNum) throws SQLException {
-                Ortholog o = new Ortholog();
-                o.setSrcRgdId(src);
-                o.setDestRgdId(rs.getInt("partner_rgd_id"));
-                o.setSrcSpeciesTypeKey(srcSpKey);
-                o.setDestSpeciesTypeKey(dstSpKey);
-                o.setXrefDataSrc("Alliance");
-                o.setXrefDataSet(rs.getString("methods_matched"));
-                return o;
+                OrthologRelation r = new OrthologRelation();
+                r.setSrcRgdId(rs.getInt("human_rgd"));
+                r.setSrcSpeciesTypeKey(SpeciesType.HUMAN);
+                r.setDestRgdId(rs.getInt("species_rgd"));
+                r.setDestSpeciesTypeKey(destSpKey);
+                r.setDataSource("Alliance");
+                r.setDataSetName(rs.getString("methods_matched"));
+                return r;
             }
         };
         q.declareParameter(new SqlParameter(Types.INTEGER));
@@ -946,7 +934,8 @@ public class OrthologRelationDao {
         q.declareParameter(new SqlParameter(Types.INTEGER));
         q.compile();
         @SuppressWarnings("unchecked")
-        List<Ortholog> result = (List<Ortholog>) q.execute(srcRgdId, destSpeciesTypeKey, srcRgdId, destSpeciesTypeKey);
+        List<OrthologRelation> result = (List<OrthologRelation>) q.execute(
+                SpeciesType.HUMAN, speciesTypeKey, SpeciesType.HUMAN, speciesTypeKey);
         return result;
     }
 

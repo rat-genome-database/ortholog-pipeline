@@ -41,6 +41,13 @@ public class OrthologRelationLoader {
         setOrthologRelations(orthologRelations);
 
         matchRgdId();
+
+        // merge Alliance mutual-best orthologs into the relation pool as human->species relations;
+        // they already carry RGD ids (no EG-id matching needed), so add them after matchRgdId
+        List<OrthologRelation> allianceRelations = dao.getAllianceRelations(speciesTypeKey);
+        this.orthologRelations.addAll(allianceRelations);
+        process.info("  Alliance relations added to pool: " + allianceRelations.size());
+
         loadData(speciesTypeKey);
     }
 
@@ -404,7 +411,7 @@ public class OrthologRelationLoader {
 
         int[] methodCounters = new int[4];
         int[] sourceCounters = new int[4]; // manual, Alliance, HCOP, NCBI
-        int[] conflictCounters = new int[2]; // manual, Alliance (multiple candidates -> no ortholog picked)
+        int[] conflictCounters = new int[2]; // [0]=manual conflicts (multiple manual orthologs -> none picked)
         for( OrthologGroup group: groups ) {
 
             // build species-human complementary relations
@@ -428,8 +435,7 @@ public class OrthologRelationLoader {
         process.info("  bestFitFromAlliance " + sourceCounters[1]);
         process.info("  bestFitFromHCOP     " + sourceCounters[2]);
         process.info("  bestFitFromNCBI     " + sourceCounters[3]);
-        process.info("  conflicts (manual, no ortholog picked):   " + conflictCounters[0]);
-        process.info("  conflicts (Alliance, no ortholog picked): " + conflictCounters[1] + "   (details in multipleMatch.log)");
+        process.info("  conflicts (multiple manual orthologs, none picked): " + conflictCounters[0] + "   (details in multipleMatch.log)");
 
         process.info("ORTHOLOG BEST FIT STATS (HCOP/NCBI tie-break methods):");
         process.info("  bestFitOneRel " + methodCounters[0]);
@@ -456,10 +462,12 @@ public class OrthologRelationLoader {
 
     // strong-ortholog cascade for a (srcRgdId, destSpeciesTypeKey) pair:
     //   priority 1 -- manual ortholog (XREF_DATA_SRC='RGD')
-    //   priority 2 -- Alliance mutual-best (XREF_DATA_SRC='Alliance', read from AGR_ORTHOLOGS)
-    //   priority 3 -- best-fit among incoming HCOP relations (dataSource='HGNC')
-    //   priority 4 -- best-fit among incoming NCBI relations (dataSource='NCBI')
-    // unpicked relations from any tier fall through to processOrthologAssociations as weak orthologs.
+    //   priority 2 -- best-fit among Alliance relations (dataSource='Alliance')
+    //   priority 3 -- best-fit among HCOP relations  (dataSource='HGNC')
+    //   priority 4 -- best-fit among NCBI relations  (dataSource='NCBI')
+    // Alliance/HCOP/NCBI relations all live in the same pool, with reciprocal complementary relations
+    // built per group, so the two directions of a pair are derived from the same source (no non-reciprocal
+    // picks). Unpicked relations from any tier fall through to processOrthologAssociations as weak orthologs.
     Ortholog generateOrtholog(List<OrthologRelation> relations, int[] methodCounters, int[] sourceCounters, int[] conflictCounters) throws Exception {
 
         int srcRgdId = relations.get(0).getSrcRgdId();
@@ -477,18 +485,11 @@ public class OrthologRelationLoader {
             return manualOrthologs.get(0);
         }
 
-        // priority 2: Alliance mutual-best
-        List<Ortholog> allianceOrthologs = dao.getAllianceOrthologs(srcRgdId, destSpeciesTypeKey);
-        if( !allianceOrthologs.isEmpty() ) {
-            if( allianceOrthologs.size()>1 ) {
-                multipleMatch.warn("CONFLICT: multiple Alliance orthologs for src_rgd_id="+srcRgdId+" and species type key "+destSpeciesTypeKey);
-                conflictCounters[1]++;
-                return null;
-            }
+        // priority 2: Alliance relations
+        List<OrthologRelation> allianceRelations = filterByDataSource(relations, "Alliance");
+        if( !allianceRelations.isEmpty() ) {
             sourceCounters[1]++;
-            Ortholog a = allianceOrthologs.get(0);
-            stampAuditFields(a);
-            return a;
+            return relationToOrtholog(pickBestFitRelation(allianceRelations, methodCounters, dao));
         }
 
         // priority 3: HCOP (HGNC) relations

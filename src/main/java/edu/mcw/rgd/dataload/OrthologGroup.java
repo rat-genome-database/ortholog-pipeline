@@ -33,17 +33,13 @@ public class OrthologGroup {
                     }
                     return false;
                 } else {
-                    // different data sources: current code designed only to merge with NCBI
-                    if( !rel.getDataSource().equals("NCBI") ) {
-                        throw new RuntimeException("OrthologGroup: cannot merge relations");
-                    } else {
-                        // merge NCBI with HGNC
-                        String newDataSetName = mergeDataSetNames(r.getDataSetName(), rel.getDataSource());
-                        if( !newDataSetName.equals(r.getDataSetName()) ) {
-                            r.setDataSetName(newDataSetName);
-                        }
-                        return false;
+                    // different data sources agreeing on the same (src,dest): keep the higher-priority
+                    // source (Alliance > HGNC > NCBI) and its dataset; the lower-priority evidence is dropped
+                    if( OrthologRelationDao.sourcePriority(rel.getDataSource()) > OrthologRelationDao.sourcePriority(r.getDataSource()) ) {
+                        r.setDataSource(rel.getDataSource());
+                        r.setDataSetName(rel.getDataSetName());
                     }
+                    return false;
                 }
             }
         }
