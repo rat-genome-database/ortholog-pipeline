@@ -648,10 +648,12 @@ public class OrthologRelationLoader {
         int orthologsMatched = 0;
         int orthologsInserted = 0;
         int orthologsDeleted = 0;
+        int orthologsSourceUpdated = 0;
 
         List<Ortholog> matchList = new ArrayList<>();
         List<Ortholog> insertList = new ArrayList<>();
         List<Ortholog> deleteList = new ArrayList<>();
+        List<Ortholog> sourceUpdateList = new ArrayList<>();
         List<Ortholog> weakOrthologs = new ArrayList<>();
 
         dao.logDeletedOrthologs.info("LOAD GROUPS STARTING");
@@ -660,8 +662,12 @@ public class OrthologRelationLoader {
 
             for( Ortholog o: group.incomingList ) {
 
-                int genetogeneKey = dao.getKeyForMatchingOrtholog(o, deleteList);
-                if( genetogeneKey>0 ) {
+                int genetogeneKey = dao.getKeyForMatchingOrtholog(o, deleteList, sourceUpdateList);
+                if( genetogeneKey==OrthologRelationDao.SOURCE_UPDATED ) {
+                    // matched an existing row, but the incoming source outranks the stored one --
+                    // already queued in sourceUpdateList (key set) for an in-place source refresh
+                }
+                else if( genetogeneKey>0 ) {
                     // there is a matching ortholog
                     o.setKey(genetogeneKey);
                     matchList.add(o);
@@ -690,6 +696,12 @@ public class OrthologRelationLoader {
                 insertList.clear();
             }
 
+            if( !sourceUpdateList.isEmpty() ) {
+                dao.updateOrthologSources(sourceUpdateList, 70);
+                orthologsSourceUpdated += sourceUpdateList.size();
+                sourceUpdateList.clear();
+            }
+
             if( !deleteList.isEmpty() ) {
                 dao.deleteOrthologs(deleteList);
                 orthologsDeleted += deleteList.size();
@@ -701,6 +713,7 @@ public class OrthologRelationLoader {
         process.info("ORTHOLOGS MATCHED  " + orthologsMatched);
         process.info("ORTHOLOGS INSERTED " + orthologsInserted);
         process.info("ORTHOLOGS DELETED  " + orthologsDeleted);
+        process.info("ORTHOLOGS SOURCE-UPDATED " + orthologsSourceUpdated);
 
         handleStaleOrthologs(modifiedDate, speciesTypeKey);
 

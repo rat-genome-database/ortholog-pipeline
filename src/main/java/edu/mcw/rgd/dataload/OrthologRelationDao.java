@@ -12,6 +12,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import org.springframework.jdbc.core.SqlParameter;
+import org.springframework.jdbc.object.BatchSqlUpdate;
 import org.springframework.jdbc.object.MappingSqlQuery;
 
 import javax.sql.DataSource;
@@ -99,12 +100,18 @@ public class OrthologRelationDao {
         return false;
     }
 
+    /// returned by getKeyForMatchingOrtholog when the incoming ortholog matches an existing row but its
+    /// source outranks the stored one; the incoming ortholog is queued in sourceUpdateList for an in-place
+    /// xref_data_src/xref_data_set refresh (its key is already set)
+    public static final int SOURCE_UPDATED = Integer.MIN_VALUE;
+
     /**
      * check if two genes are orthologous
-     * @return lowest value of genetogene_key if there is an orthology between two genes; 0 otherwise
+     * @return lowest value of genetogene_key if there is an orthology between two genes; 0 otherwise;
+     *         SOURCE_UPDATED if it matched an existing row whose source should be refreshed
      * @throws Exception when unexpected error in spring framework occurs
      */
-    public int getKeyForMatchingOrtholog(Ortholog ortholog, List<Ortholog> deleteList) throws Exception {
+    public int getKeyForMatchingOrtholog(Ortholog ortholog, List<Ortholog> deleteList, List<Ortholog> sourceUpdateList) throws Exception {
         // check if these genes have multiple orthologs
 
         int srcRgdId = ortholog.getSrcRgdId();
@@ -137,8 +144,16 @@ public class OrthologRelationDao {
 
         if( existingOrtholog==null )
             return 0;
-        else if( existingOrtholog.getDestRgdId()==ortholog.getDestRgdId() )
+        else if( existingOrtholog.getDestRgdId()==ortholog.getDestRgdId() ) {
+            // same ortholog pair already in RGD; if the incoming source outranks the stored one, refresh
+            // the stored source/dataset in place so the label tracks the current best source
+            if( sourcePriority(ortholog.getXrefDataSrc()) > sourcePriority(existingOrtholog.getXrefDataSrc()) ) {
+                ortholog.setKey(existingOrtholog.getKey());
+                sourceUpdateList.add(ortholog);
+                return SOURCE_UPDATED;
+            }
             return existingOrtholog.getKey();
+        }
 
         // there is no matching ortholog but
         // there is another ortholog in RGD for same srcRgdId and destSpeciesTypeKey;
@@ -470,6 +485,22 @@ public class OrthologRelationDao {
             logInsertedOrthologs.info(o.dump("|"));
         }
         return orthologDAO.insertOrthologs(orthologs);
+    }
+
+    /// refresh xref_data_src / xref_data_set (and last_modified) in place for orthologs whose matched
+    /// row should adopt a higher-priority source; the genetogene_key is preserved (created_date untouched)
+    public int updateOrthologSources(List<Ortholog> orthologs, int lastModifiedBy) throws Exception {
+        BatchSqlUpdate su = new BatchSqlUpdate(orthologDAO.getDataSource(),
+                "UPDATE genetogene_rgd_id_rlt SET xref_data_src=?, xref_data_set=?, "+
+                        "last_modified_date=SYSDATE, last_modified_by=? WHERE genetogene_key=?",
+                new int[]{Types.VARCHAR, Types.VARCHAR, Types.INTEGER, Types.INTEGER});
+        su.compile();
+        for( Ortholog o: orthologs ) {
+            logInsertedOrthologs.info("SRC-UPDATE|"+o.dump("|"));
+            su.update(o.getXrefDataSrc(), o.getXrefDataSet(), lastModifiedBy, o.getKey());
+        }
+        su.flush();
+        return orthologs.size();
     }
 
     /**
