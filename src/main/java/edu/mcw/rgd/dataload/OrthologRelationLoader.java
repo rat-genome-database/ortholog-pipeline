@@ -225,7 +225,7 @@ public class OrthologRelationLoader {
             String srcRgdId; // the source rgd id
             String destRgdId; // the source eg id
 
-            process.debug("QC EGSRC="+idSrc+", EGDST="+idDest);
+            //process.debug("QC EGSRC="+idSrc+", EGDST="+idDest);
 
             // processing source first, if the source couldn't be matched, don't process destination any more
             // first check if the query is already made and stored in egIdRgdId map
@@ -404,6 +404,7 @@ public class OrthologRelationLoader {
 
         int[] methodCounters = new int[4];
         int[] sourceCounters = new int[4]; // manual, Alliance, HCOP, NCBI
+        int[] conflictCounters = new int[2]; // manual, Alliance (multiple candidates -> no ortholog picked)
         for( OrthologGroup group: groups ) {
 
             // build species-human complementary relations
@@ -416,7 +417,7 @@ public class OrthologRelationLoader {
             // pick an ortholog for every relation group in a species pair
             for( Map.Entry<String, List<OrthologRelation>> entry: speciesMap.entrySet() ) {
                 List<OrthologRelation> relations = entry.getValue();
-                Ortholog ortholog = generateOrtholog(relations, methodCounters, sourceCounters);
+                Ortholog ortholog = generateOrtholog(relations, methodCounters, sourceCounters, conflictCounters);
                 if( ortholog!=null )
                     group.incomingList.add(ortholog);
             }
@@ -427,6 +428,8 @@ public class OrthologRelationLoader {
         process.info("  bestFitFromAlliance " + sourceCounters[1]);
         process.info("  bestFitFromHCOP     " + sourceCounters[2]);
         process.info("  bestFitFromNCBI     " + sourceCounters[3]);
+        process.info("  conflicts (manual, no ortholog picked):   " + conflictCounters[0]);
+        process.info("  conflicts (Alliance, no ortholog picked): " + conflictCounters[1] + "   (details in multipleMatch.log)");
 
         process.info("ORTHOLOG BEST FIT STATS (HCOP/NCBI tie-break methods):");
         process.info("  bestFitOneRel " + methodCounters[0]);
@@ -457,7 +460,7 @@ public class OrthologRelationLoader {
     //   priority 3 -- best-fit among incoming HCOP relations (dataSource='HGNC')
     //   priority 4 -- best-fit among incoming NCBI relations (dataSource='NCBI')
     // unpicked relations from any tier fall through to processOrthologAssociations as weak orthologs.
-    Ortholog generateOrtholog(List<OrthologRelation> relations, int[] methodCounters, int[] sourceCounters) throws Exception {
+    Ortholog generateOrtholog(List<OrthologRelation> relations, int[] methodCounters, int[] sourceCounters, int[] conflictCounters) throws Exception {
 
         int srcRgdId = relations.get(0).getSrcRgdId();
         int destSpeciesTypeKey = relations.get(0).getDestSpeciesTypeKey();
@@ -466,7 +469,8 @@ public class OrthologRelationLoader {
         List<Ortholog> manualOrthologs = dao.getManualOrthologs(srcRgdId, destSpeciesTypeKey);
         if( !manualOrthologs.isEmpty() ) {
             if( manualOrthologs.size()>1 ) {
-                process.warn("CONFLICT: multiple manual orthologs for src_rgd_id="+srcRgdId+" and species type key "+destSpeciesTypeKey);
+                multipleMatch.warn("CONFLICT: multiple manual orthologs for src_rgd_id="+srcRgdId+" and species type key "+destSpeciesTypeKey);
+                conflictCounters[0]++;
                 return null;
             }
             sourceCounters[0]++;
@@ -477,7 +481,8 @@ public class OrthologRelationLoader {
         List<Ortholog> allianceOrthologs = dao.getAllianceOrthologs(srcRgdId, destSpeciesTypeKey);
         if( !allianceOrthologs.isEmpty() ) {
             if( allianceOrthologs.size()>1 ) {
-                process.warn("CONFLICT: multiple Alliance orthologs for src_rgd_id="+srcRgdId+" and species type key "+destSpeciesTypeKey);
+                multipleMatch.warn("CONFLICT: multiple Alliance orthologs for src_rgd_id="+srcRgdId+" and species type key "+destSpeciesTypeKey);
+                conflictCounters[1]++;
                 return null;
             }
             sourceCounters[1]++;
