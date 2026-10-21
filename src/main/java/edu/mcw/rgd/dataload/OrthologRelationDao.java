@@ -492,7 +492,7 @@ public class OrthologRelationDao {
     public int updateOrthologSources(List<Ortholog> orthologs, int lastModifiedBy) throws Exception {
         BatchSqlUpdate su = new BatchSqlUpdate(orthologDAO.getDataSource(),
                 "UPDATE genetogene_rgd_id_rlt SET xref_data_src=?, xref_data_set=?, "+
-                        "last_modified_date=SYSDATE, last_modified_by=? WHERE genetogene_key=?",
+                        "last_modified_date=LOCALTIMESTAMP(0), last_modified_by=? WHERE genetogene_key=?",
                 new int[]{Types.VARCHAR, Types.VARCHAR, Types.INTEGER, Types.INTEGER});
         su.compile();
         for( Ortholog o: orthologs ) {
@@ -863,16 +863,15 @@ public class OrthologRelationDao {
         if( dataExists==0 ) {
             final String sql = "INSERT INTO agr_orthologs (gene_rgd_id_1, gene_rgd_id_2, confidence, is_best_score, "+
                     "is_best_rev_score, methods_matched, last_update_date) "+
-                    "VALUES(?,?,?,?,?,?,SYSDATE)";
+                    "VALUES(?,?,?,?,?,?,LOCALTIMESTAMP(0))";
             xdbIdDAO.update(sql, rgdId1, rgdId2, confidence, bestScore, bestRevScore, methodsMatched);
             logInsertedAgrOrthologs.debug("RGD1:"+rgdId1+"|RGD2:"+rgdId2+"|"+confidence+
                     "|IS_BEST:"+bestScore+"|IS_BEST_REV:"+bestRevScore+"|METHODS_MATCHED:"+methodsMatched);
             return 1;
         } else {
             final String sql = """
-                UPDATE agr_orthologs SET confidence=?, is_best_score=?, is_best_rev_score=?, last_update_date=SYSDATE
+                UPDATE agr_orthologs SET confidence=?, is_best_score=?, is_best_rev_score=?, last_update_date=LOCALTIMESTAMP(0)
                 WHERE gene_rgd_id_1=? AND gene_rgd_id_2=? AND methods_matched=?
-                  AND ROWNUM<2
                 """;
             xdbIdDAO.update(sql, confidence, bestScore, bestRevScore, rgdId1, rgdId2, methodsMatched);
             return 0;

@@ -2,6 +2,9 @@ TODO: generate rat_genes_without_orthologs file
 TODO: generate multi ortholog assignment for rat
 TODO: logRgd -- inacurate, must be species-specific
 
+Oct 21, 2026
+  migrated to postgres; updated dependencies
+
 May 29, 2026
   fixes: NCBI orthologs URL ftp->https; getAllianceOrthologs now joins RGD_IDS for species and dedups bidirectional AGR rows
   Alliance/manual ortholog conflicts now logged to multipleMatch.log (off process.log) with a reported count; silenced per-relation QC debug line
