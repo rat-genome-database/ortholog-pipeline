@@ -357,8 +357,9 @@ public class OrthologRelationLoader {
             int nonActiveRgdId=0;
             String reRgdIdInfo="";
 
-            // find the replaced genes
-            List<Integer> replacedRgdIds= new ArrayList<>();
+            // find the replaced genes; a set, so that several withdrawn genes replaced by the same active gene
+            // count as a single replacement, not as 'multiple'
+            Set<Integer> replacedRgdIds= new LinkedHashSet<>();
             for (int i=0; i<nonActiveRgdIds.size(); i++) {
                 nonActiveRgdId=nonActiveRgdIds.get(i);
                 replacedRgdId= dao.getReplacedGeneByRgdId(nonActiveRgdId);
@@ -373,8 +374,9 @@ public class OrthologRelationLoader {
                     // multiple replaced genes
                     return multiple+" replaced:"+ reRgdIdInfo;
             } else if (replacedRgdIds.size() ==1) {
-                // matches one replaced gene
-                    return replacedRgdId +"";
+                // matches one replaced gene; note: 'replacedRgdId' holds the value from the last loop pass
+                // (0 if the last withdrawn gene had no replacement), so take the id from the set instead
+                    return replacedRgdIds.iterator().next() +"";
             } else {
                 // filteredReplacedRgdIds.size()=0, couldn't find replaced gene
                 return withdrawn+":"+nonActiveRgdId;
