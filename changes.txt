@@ -2,6 +2,9 @@ TODO: generate rat_genes_without_orthologs file
 TODO: generate multi ortholog assignment for rat
 TODO: logRgd -- inacurate, must be species-specific
 
+Nov 18, 2026
+  run.sh exits with the java exit code (was always 0 because of tee); withdrawn gene with a single active replacement no longer dropped
+
 May 29, 2026
   fixed NCBI gene_orthologs URL: ftp:// -> https:// (FileDownloader2 has no FTP support)
 
